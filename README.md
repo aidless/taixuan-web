@@ -149,7 +149,6 @@ taixuan-web/
 ## 📮 联系
 
 - Issue: https://github.com/aidless/taixuan-web/issues
-- Email: 17353895263@163.com
 
 ---
 
