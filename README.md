@@ -1,96 +1,57 @@
 # 泰玄小站 · Taixuan Web
 
-> 8 派传统文化工具箱 · Flask + DeepSeek LLM  
-> Eight Schools of Traditional Chinese Culture · Flask + DeepSeek LLM
+> **8 派传统文化工具箱 · Flask + DeepSeek LLM**  
+> Eight Schools of Traditional Chinese Culture
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org)
 [![Flask](https://img.shields.io/badge/Flask-3.0-green.svg)](https://flask.palletsprojects.com)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live](https://img.shields.io/badge/live-116.62.69.83-success)](http://116.62.69.83)
 
-## 📖 简介
+---
 
-泰玄小站是一个基于传统文化的**文化参考与娱乐工具**,涵盖八字、紫微、奇门遁甲、六爻、梅花易数、塔罗、西方占星、吠陀占星八个流派。
+## 📖 项目简介
 
-**核心特性**:
-- 🎴 **8 派合参** — 八字 / 紫微 / 奇门 / 六爻 / 梅花 / 塔罗 / 西占 / 吠陀
-- 🤖 **AI 解读** — DeepSeek LLM 实时生成文化背景分析
-- 🎨 **简洁 UI** — 深色主题 + 金色点缀,响应式适配
-- ⚡ **轻量部署** — Flask + Gunicorn,2C2G ECS 即可跑
-- 🔒 **本地优先** — 无追踪,无第三方 Cookie,日志本地化
+泰玄小站是一个**基于传统文化的文化参考与娱乐工具**,涵盖八字、紫微、奇门遁甲、六爻、梅花易数、塔罗、西方占星、吠陀占星八个流派。
 
-## 🎯 项目定位
+**特点**:
+- 🎴 **8 派合参** — 一站式覆盖中华与西方主流命理/占卜体系
+- 🤖 **AI 解读** — DeepSeek v4-flash 实时生成文化背景分析(2-5 秒响应)
+- 🎨 **简洁 UI** — 深色主题 + 金色点缀,响应式适配桌面和移动端
+- ⚡ **轻量部署** — Flask 单进程,2C2G ECS 即可跑(实测 ~600MB 内存)
+- 🔓 **开源 MIT** — 完全开源,可自由 fork / 修改 / 商用
 
-> ⚠️ **本服务仅供文化参考与娱乐,不构成任何专业建议**(医疗、法律、财务、心理咨询等)。
+> ⚠️ **重要声明**:本服务仅供文化参考与娱乐,不构成任何专业建议(医疗、法律、财务、心理咨询等)。
 
-所有解读结果由 AI 模型基于传统算法生成,目的是**文化传承与娱乐**,请勿将解读结果作为人生决策的唯一依据。
+---
 
-## 🏗️ 技术栈
+## 🚀 在线访问
 
-| 层级 | 技术 |
-|---|---|
-| 前端 | HTML5 + Tailwind-style CSS + 原生 JS |
-| 后端 | Flask 3.0 + Gunicorn |
-| LLM | DeepSeek v4-flash(主路) + Ollama qwen3-4b(兜底) + Mock(开发) |
-| 部署 | Ubuntu 22.04 + Nginx(可选) + systemd |
-| 配置 | YAML-based prompts(8 派各一个) |
+**Demo**:http://116.62.69.83
 
-## 📂 目录结构
+---
 
-```
-taixuan-web/
-├── app.py                    # Flask 主入口
-├── llm_backends.py           # LLM 路由器(主路/兜底/Mock)
-├── requirements.txt          # Python 依赖
-├── templates/                # Jinja2 模板
-│   ├── base.html             # 基础布局(导航/页脚)
-│   ├── index.html            # 首页(8 派卡片)
-│   ├── privacy.html          # 隐私政策
-│   ├── terms.html            # 服务条款
-│   └── liupai/               # 8 派子页
-│       ├── bazi.html         # 八字
-│       ├── ziwei.html        # 紫微
-│       ├── qimen.html        # 奇门
-│       ├── liuyao.html       # 六爻
-│       ├── meihua.html       # 梅花
-│       ├── tarot.html        # 塔罗
-│       ├── western.html      # 西占
-│       └── vedic.html        # 吠陀
-├── static/                   # 静态资源
-│   └── css/style.css         # 全局样式
-├── specs/prompts/            # 8 派 prompt YAML(来自微信小程序)
-│   ├── bazi.yaml
-│   ├── ziwei.yaml
-│   ├── qimen.yaml
-│   ├── liuyao.yaml
-│   ├── meihua.yaml
-│   ├── tarot.yaml
-│   ├── western.yaml
-│   └── vedic.yaml
-└── README.md                 # 本文件
-```
-
-## 🚀 快速开始
+## ⚡ 5 分钟上手
 
 ### 环境要求
+
 - Python 3.10+
-- pip
-- DeepSeek API key(或本地 Ollama + qwen3:4b)
+- DeepSeek API key(免费 2000 万 tokens,见 https://platform.deepseek.com)
 
 ### 安装
 
 ```bash
-# 1. 克隆
-git clone https://github.com/你的用户名/taixuan-web.git
+git clone https://github.com/aidless/taixuan-web.git
 cd taixuan-web
 
-# 2. 创建虚拟环境
 python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. 装依赖
+source venv/bin/activate
 pip install -r requirements.txt
+```
 
-# 4. 配置 API key
+### 配置
+
+```bash
 export OPENAI_API_KEY="sk-your-deepseek-key"
 export OPENAI_API_BASE="https://api.deepseek.com/v1"
 export DEEPSEEK_MODEL="deepseek-v4-flash"
@@ -99,54 +60,107 @@ export DEEPSEEK_MODEL="deepseek-v4-flash"
 ### 跑
 
 ```bash
-# 开发模式
 python app.py
-# → http://127.0.0.1:5000
-
-# 生产模式(Gunicorn)
-gunicorn --workers 2 --bind 0.0.0.0:5000 app:app
+# → 浏览器访问 http://127.0.0.1:5000
 ```
 
-## 🔧 配置说明
+---
 
-### 环境变量
+## 🎴 8 派一览
 
-| 变量 | 必填 | 说明 |
+| 派别 | 输入 | 特色 |
 |---|---|---|
-| `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY` | ✅(主路) | DeepSeek API key |
-| `OPENAI_API_BASE` | ❌ | 默认 `https://api.deepseek.com/v1` |
-| `DEEPSEEK_MODEL` | ❌ | 默认 `deepseek-v4-flash` |
-| `OLLAMA_HOST` | ❌ | 默认 `http://127.0.0.1:11434`(兜底) |
-| `OLLAMA_MODEL` | ❌ | 默认 `qwen3:4b` |
-| `LLM_MODE` | ❌ | `primary` / `fallback` / `mock` |
-| `PORT` | ❌ | 默认 5000 |
+| **八字** | 出生年月日时 | 天干地支 · 五行生克 · 排盘算法 |
+| **紫微斗数** | 出生年月日时 | 十四主星 · 十二宫位 |
+| **奇门遁甲** | 起卦时间 + 问题 | 九宫八卦 · 时家奇门 |
+| **六爻** | 起卦时间 + 问题 | 三枚铜钱 · 古法起卦 |
+| **梅花易数** | 数字 + 时间 | 体用生克 · 数字起卦 |
+| **塔罗** | 牌阵 + 问题 | 78 张神秘符号 · 心理投射 |
+| **西方占星** | 出生时间地点 | 星盘相位 · 行星运行 |
+| **吠陀占星** | 出生时间地点 | 印度古法 · 二十七宿 |
 
-### 兜底机制
+---
 
-`LLMRouter` 三级兜底:
-1. **主路** DeepSeek v4-flash(在线,~2-5s)
-2. **兜底** Ollama + qwen3:4b(本地,30s+,需要 GPU)
-3. **Mock** 返回固定开发文案(无 key 时)
+## 🏗️ 技术栈
 
-## 🎨 截图
+- **前端**:HTML5 + CSS3 + 原生 JS(无框架)
+- **后端**:Flask 3.0
+- **LLM**:DeepSeek v4-flash(主路)+ Ollama qwen3:4b(兜底)+ Mock(开发)
+- **配置**:YAML-based prompts(8 派各一个,独立可编辑)
+- **部署**:Ubuntu 22.04 + Nginx + systemd(详细见 [DEPLOY.md](DEPLOY.md))
 
-(待补)
+---
 
-## 📜 License
+## 📂 目录结构
 
-MIT License — 详见 [LICENSE](LICENSE) 文件
+```
+taixuan-web/
+├── app.py                    # Flask 主入口
+├── llm_backends.py           # LLM 路由器
+├── requirements.txt          # Python 依赖
+├── README.md                 # 本文件
+├── DEPLOY.md                 # 部署文档 ⭐
+├── CHANGELOG.md              # 版本日志
+├── LICENSE                   # MIT 协议
+├── templates/                # Jinja2 模板
+│   ├── base.html
+│   ├── index.html            # 8 派卡片首页
+│   ├── privacy.html
+│   ├── terms.html
+│   └── liupai/               # 8 派子页
+├── static/css/style.css      # 全局样式
+├── specs/                    # 配置数据
+│   ├── prompts/              # 8 派 prompt YAML
+│   ├── schools/              # 8 派结果 schema
+│   └── compliance/           # 合规配置
+└── tests/                    # 测试
+```
 
-## 🙏 致谢
+---
 
-- **DeepSeek** 提供高质量 LLM API
-- **8 派传统文化** 数千年的智慧积累
-- **微信小程序开源生态** 的提示词工程实践
+## 📜 文档
 
-## 📮 联系方式
+- [README.md](README.md) — 本文件,项目介绍
+- [DEPLOY.md](DEPLOY.md) — 部署到 ECS / Nginx / SSL / 故障排除
+- [CHANGELOG.md](CHANGELOG.md) — 版本变更历史
 
-- Issue: [GitHub Issues](https://github.com/你的用户名/taixuan-web/issues)
+---
+
+## 🪤 重要提示
+
+1. **本项目为文化娱乐**,不是命理预测工具。所有解读结果基于 AI 生成,不应作为任何决策的唯一依据。
+2. **API key 勿提交**:在 `.gitignore` 已排除,但请自行确认。
+3. **合规**:在某些国家/地区,命理/占卜类内容可能受监管,请自行评估法律风险。
+4. **数据隐私**:本项目默认**不存储**任何用户输入。如需保存历史,自行加数据库。
+
+---
+
+## 🤝 贡献
+
+欢迎 PR / Issue!
+
+开发规范:
+- Python 3.10+,PEP 8
+- 测试:`pytest tests/`
+- 提交前跑 `python app.py` 确保能起
+
+---
+
+## 📮 联系
+
+- Issue: https://github.com/aidless/taixuan-web/issues
 - Email: 17353895263@163.com
 
 ---
 
-_Built with ❤️ by [刘泽文](https://github.com/你的用户名) · 2026_
+## 🙏 致谢
+
+- **DeepSeek** — 提供高质量 LLM API
+- **8 派传统文化** — 数千年的智慧积累
+- **开源生态** — Flask / Python / Ubuntu
+
+---
+
+_Built with ❤️ by [刘泽文](https://github.com/aidless) · 2026_
+
+_MIT License · 详见 [LICENSE](LICENSE)_
