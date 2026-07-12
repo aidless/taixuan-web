@@ -14,7 +14,7 @@ import json
 import time
 import urllib.request
 import urllib.error
-from typing import Protocol, List, Dict, Any, Optional
+from typing import Protocol, List, Dict, Any, Optional, Generator
 
 
 # ============================================================
@@ -29,6 +29,14 @@ class LLMBackend(Protocol):
         temperature: float = 0.7,
         max_tokens: int = 1500,
     ) -> Dict[str, Any]:
+        ...
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1500,
+    ) -> Generator[str, None, None]:
+        """流式 chat,逐 chunk yield text 片段"""
         ...
 
 
@@ -99,6 +107,54 @@ class DeepSeekBackend:
                 "latency_sec": time.time() - t0,
                 "error": str(e),
             }
+
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1500,
+    ) -> Generator[str, None, None]:
+        """流式 chat,逐 chunk yield text 片段。
+        DeepSeek API 兼容 OpenAI stream 协议:每行 data: {json},末尾 data: [DONE]
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        url = f"{self.api_base.rstrip('/')}/chat/completions"
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or line == "data: [DONE]":
+                        continue
+                    if not line.startswith("data: "):
+                        continue
+                    try:
+                        chunk = json.loads(line[6:])
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
+                    text = delta.get("content", "")
+                    if text:
+                        yield text
+        except Exception as e:
+            yield f"[STREAM_ERROR: {e}]"
 
     def prewarm(self) -> None:
         if self._prewarmed:
@@ -176,6 +232,47 @@ class OllamaQwenBackend:
                 "error": str(e),
             }
 
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1500,
+    ) -> Generator[str, None, None]:
+        """Ollama 流式 API,逐行返回 NDJSON"""
+        num_predict = max(max_tokens + 500, 2000)
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "temperature": temperature,
+                "num_predict": num_predict,
+                "num_ctx": self.num_ctx,
+            },
+        }
+        url = f"{self.host.rstrip('/')}/api/chat"
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=data, headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    text = chunk.get("message", {}).get("content", "")
+                    if text:
+                        yield text
+                    if chunk.get("done"):
+                        break
+        except Exception as e:
+            yield f"[STREAM_ERROR: {e}]"
+
     def prewarm(self) -> None:
         if self._prewarmed:
             return
@@ -224,6 +321,27 @@ class MockBackend:
 
     def prewarm(self) -> None:
         pass
+
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1500,
+    ) -> Generator[str, None, None]:
+        """Mock 也按字符流式 yield,模拟打字效果"""
+        text = (
+            "【开发模式 · Mock 响应】\n\n"
+            "感谢你的提问。当前服务器未配置 LLM API Key,"
+            "正在使用 mock 响应以保证服务可用。\n\n"
+            "如需真实解读,请联系管理员配置:\n"
+            "- OPENAI_API_KEY 或 DEEPSEEK_API_KEY(主路)\n"
+            "- 或本地 Ollama + qwen3:4b 模型(兜底)\n\n"
+            "本服务仅供文化参考与娱乐,不构成任何专业建议。"
+        )
+        # 逐字 yield,模拟打字
+        for ch in text:
+            yield ch
+            time.sleep(0.005)
 
 
 # ============================================================
@@ -309,6 +427,57 @@ class LLMRouter:
                 self.fallback.prewarm()
             except Exception:
                 pass
+
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1500,
+    ) -> Generator[str, None, None]:
+        """流式调度:主路 → 失败 → 兜底 → mock
+
+        注意:主路失败标志是 yield [STREAM_ERROR: ...] 的 chunk
+        """
+        backend_used = "unknown"
+        primary_failed = True
+
+        # 1. 主路
+        if self.primary and self._primary_dead_count < self._primary_dead_threshold:
+            try:
+                had_chunk = False
+                for chunk in self.primary.chat_stream(messages, temperature, max_tokens):
+                    if chunk.startswith("[STREAM_ERROR"):
+                        raise RuntimeError(chunk)
+                    had_chunk = True
+                    yield chunk
+                if had_chunk:
+                    primary_failed = False
+                    backend_used = self.primary.name
+            except Exception as e:
+                print(f"[LLMRouter] primary stream failed: {e}", flush=True)
+                self._primary_dead_count += 1
+
+        # 2. 兜底(主路失败)
+        if primary_failed:
+            if self.fallback:
+                try:
+                    had_chunk = False
+                    for chunk in self.fallback.chat_stream(messages, temperature, max_tokens):
+                        if chunk.startswith("[STREAM_ERROR"):
+                            raise RuntimeError(chunk)
+                        had_chunk = True
+                        yield chunk
+                    if had_chunk:
+                        backend_used = self.fallback.name
+                        primary_failed = False
+                except Exception as e:
+                    print(f"[LLMRouter] fallback stream failed: {e}", flush=True)
+
+        # 3. Mock 兜底(都失败)
+        if primary_failed:
+            backend_used = self.mock.name
+            for chunk in self.mock.chat_stream(messages, temperature, max_tokens):
+                yield chunk
 
 
 if __name__ == "__main__":

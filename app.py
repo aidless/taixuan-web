@@ -27,7 +27,7 @@ import time
 import logging
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, abort
+from flask import Flask, render_template, request, jsonify, abort, Response, stream_with_context
 
 # ============================================================
 # 路径配置
@@ -226,6 +226,69 @@ def api_reading(name):
         "disclaimer": fallback_text,
         "timestamp": datetime.utcnow().isoformat() + "Z",
     })
+
+
+@app.route("/api/v2/liupai/<name>/reading_stream", methods=["POST"])
+def reading_stream(name):
+    """流式解读接口(SSE 协议)
+
+    请求:POST /api/v2/liupai/<liupai>/reading_stream
+    Body: JSON {question, birth_date, birth_time, ...}
+    响应:text/event-stream,每行:
+      data: {"type": "start", "liupai": "..."}
+      data: {"type": "chunk", "text": "..."}
+      data: {"type": "done", "full_text": "..."}
+    """
+    if name not in LIUPAI_IDS:
+        return jsonify({"error": "unknown_liupai", "liupai": name}), 400
+
+    form_data = request.get_json(force=True, silent=True) or {}
+
+    # 组装 messages(函数自己加载 cfg)
+    try:
+        messages = build_messages(name, form_data)
+    except Exception as e:
+        log.exception("build_messages failed")
+        return jsonify({"error": "build_prompt_failed", "detail": str(e)}), 500
+
+    # 加载 prompt 配置(仅用于 disclaimer,可选)
+    cfg = load_prompt(name) or {}
+
+    def generate():
+        t0 = time.time()
+        # 1. 起始事件
+        yield f"data: {json.dumps({'type': 'start', 'liupai': name, 'ts': t0}, ensure_ascii=False)}\n\n"
+
+        # 2. 流式 LLM
+        full_text = ""
+        backend_used = "unknown"
+        fallback_used = False
+        for chunk in router.chat_stream(messages, temperature=0.7, max_tokens=2500):
+            if chunk.startswith("[STREAM_ERROR"):
+                log.error(f"stream error: {chunk}")
+                yield f"data: {json.dumps({'type': 'error', 'message': chunk}, ensure_ascii=False)}\n\n"
+                break
+            full_text += chunk
+            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk}, ensure_ascii=False)}\n\n"
+
+        elapsed = time.time() - t0
+        log.info(f"stream done: latency={elapsed:.1f}s, len={len(full_text)}")
+
+        # 3. 结束事件
+        fallback_text = ""
+        if cfg and "disclaimer" in cfg:
+            fallback_text = cfg["disclaimer"].get("fallback", "")
+        yield f"data: {json.dumps({'type': 'done', 'full_text': full_text, 'latency_sec': elapsed, 'disclaimer': fallback_text}, ensure_ascii=False)}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # nginx 不要缓冲
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/privacy")

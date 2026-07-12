@@ -90,38 +90,38 @@ document.getElementById('reading-form').addEventListener('submit', async functio
   submitBtn.textContent = '推演中...';
   loading.classList.remove('hidden');
 
-  try {
-    const resp = await fetch('/api/v2/liupai/{{ liupai }}/reading', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
+  // 准备结果区
+  const resultText = document.getElementById('result-text');
+  const resultMeta = document.getElementById('result-meta');
+  const resultDisclaimer = document.getElementById('result-disclaimer');
+  resultText.textContent = '';
+  resultMeta.textContent = '派别:{{ liupai_name }} · 流式生成中...';
+  resultDisclaimer.textContent = '';
+  result.classList.remove('hidden');
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || err.error || `HTTP ${resp.status}`);
+  // 调用流式接口
+  await streamReading(
+    '{{ liupai }}',
+    formData,
+    (chunk) => { resultText.textContent += chunk; },
+    (data) => {
+      loading.classList.add('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = '开始推演';
+      resultMeta.textContent = `派别:{{ liupai_name }} · 耗时:${data.latency_sec.toFixed(1)}s`;
+      resultDisclaimer.textContent = data.disclaimer || '';
+      resultText.scrollTop = resultText.scrollHeight;
+    },
+    (err) => {
+      loading.classList.add('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = '开始推演';
+      document.getElementById('error-msg').textContent = '出错了:' + err + '。请稍后重试。';
+      errorBox.classList.remove('hidden');
+      errorBox.scrollIntoView({ behavior: 'smooth' });
     }
-
-    const data = await resp.json();
-    loading.classList.add('hidden');
-    submitBtn.disabled = false;
-    submitBtn.textContent = '开始推演';
-
-    document.getElementById('result-meta').textContent =
-      `派别:${ '{{ liupai_name }}' } · 后端:${ data.backend } · 耗时:${ data.latency_sec.toFixed(1) }s` +
-      (data.fallback_used ? ' · 已降级' : '');
-    document.getElementById('result-text').textContent = data.text;
-    document.getElementById('result-disclaimer').textContent = data.disclaimer || '';
-    result.classList.remove('hidden');
-    result.scrollIntoView({ behavior: 'smooth' });
-  } catch (err) {
-    loading.classList.add('hidden');
-    submitBtn.disabled = false;
-    submitBtn.textContent = '开始推演';
-    document.getElementById('error-msg').textContent = '出错了:' + err.message + '。请稍后重试。';
-    errorBox.classList.remove('hidden');
-    errorBox.scrollIntoView({ behavior: 'smooth' });
-  }
+  );
 });
 </script>
+<script src="{{ url_for('static', filename='js/stream.js') }}"></script>
 {% endblock %}
