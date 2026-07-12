@@ -21,6 +21,30 @@
 
 ---
 
+## 当前状态 v1.2(已完成,2026-07-12 深夜)
+
+| 模块 | 状态 | 详情 |
+|---|---|---|
+| **工程优化 10 项** | 完成 | gzip / 缓存 / 限流 / CSP / 日志轮转 / Docker / SQLite / abort 按钮 |
+| **Bug 修复 6 项** | 完成 | 🔴 BOM / init_db / 路由错装饰 / injection / 404 / import 重复 |
+| **代码质量** | 提升 | reading_stream 116→51 行 + 4 helper;score_response 66→32 行 + 3 helper |
+| **单元测试** | 新增 | tests/test_app.py 19 个测试覆盖校验/限流/中文/JSON/长度 |
+| **GitHub commit** | `5405cee` | v1.2 feat 工程化 |
+| **ECS 部署** | 待传 | 明天精力足时 |
+
+**v1.2 改动统计**:
+- 新文件 5:Dockerfile / docker-compose.yml / .dockerignore / .env.example / tests/test_app.py
+- 修改 11:app.py / llm_backends.py / benchmark_llm.py / stream.js / 8 派 HTML
+- 总 +600 行 / -200 行
+
+**v1.2 关键 bug 修复**:
+- 🔴 benchmark_llm.py UTF-8 BOM → 批量去 BOM 脚本
+- 🔴 init_db() NameError → 移到 log 定义之后
+- 🔴 _validate_question 被错误装饰成 reading_stream 路由 → helper 移到路由之后
+- 🟠 Prompt injection → 加 7 关键词检测 + 500 字长度限制
+
+---
+
 ## 当前状态 v1.1(已完成,2026-07-12 当晚)
 
 | 模块 | 状态 | 详情 |
@@ -447,5 +471,6 @@ https://github.com/aidless/taixuan-web/issues
 
 ---
 
-_最后更新:2026-07-12_
-_版本:v1.0 完成,v1.1+ 待启动_
+_最后更新:2026-07-12 23:50_
+_版本:v1.0 完成 → v1.1 流式 SSE 完成 → v1.2 工程化完成(GitHub commit `5405cee`)_
+_下一步:v1.2.1 ECS 部署 → v1.3 umami + 用户系统 v2.0 RFC_
