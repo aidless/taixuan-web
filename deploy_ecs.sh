@@ -1,9 +1,13 @@
 #!/bin/bash
 # 泰玄小站 · ECS 一键部署脚本
-# 用法:ssh root@116.62.69.83 后,粘贴本脚本内容(去掉第一行的 #!/bin/bash)
+# 用法:ssh root@<YOUR_ECS_IP> 后,粘贴本脚本内容(去掉第一行的 #!/bin/bash)
 # 或者先 scp 传到服务器再跑:bash deploy_ecs.sh
+#
+# ⚠️ 替换占位符:
+#   - <YOUR_ECS_IP>  → 你的 ECS 公网 IP
+#   - <YOUR_DOMAIN>   → 你的域名(可选,如 wanxiangapp.xyz)
 
-set -e  # 任何错误立即退出
+set -e
 
 echo "=========================================="
 echo "  泰玄小站 · ECS 一键部署 (Ubuntu 22.04)"
@@ -42,13 +46,14 @@ pip install --quiet flask gunicorn requests pyyaml
 echo ""
 echo "[4/7] 项目文件部署位置 /var/www/taixuan/"
 echo "  ⚠️  接下来需要你手动上传文件:"
-echo "  Windows PowerShell 跑:"
-echo "  scp -r C:\\Users\\Administrator\\cow\\fortune-web-v2\\{app.py,llm_backends.py,requirements.txt} root@116.62.69.83:/var/www/taixuan/"
-echo "  scp -r C:\\Users\\Administrator\\cow\\fortune-web-v2\\templates root@116.62.69.83:/var/www/taixuan/"
-echo "  scp -r C:\\Users\\Administrator\\cow\\fortune-web-v2\\static root@116.62.69.83:/var/www/taixuan/"
+echo "  Windows PowerShell 跑(替换占位符):"
 echo ""
-echo "  8 派 prompts YAML 复制(从 wx-miniprogram 拷一份):"
-echo "  scp -r C:\\test\\2026-06-27-14-59-27\\wx-miniprogram\\specs\\prompts root@116.62.69.83:/var/www/taixuan/specs/"
+echo "  scp -r C:\\path\\to\\fortune-web-v2\\app.py   root@<YOUR_ECS_IP>:/var/www/taixuan/"
+echo "  scp -r C:\\path\\to\\fortune-web-v2\\llm_backends.py root@<YOUR_ECS_IP>:/var/www/taixuan/"
+echo "  scp -r C:\\path\\to\\fortune-web-v2\\templates root@<YOUR_ECS_IP>:/var/www/taixuan/"
+echo "  scp -r C:\\path\\to\\fortune-web-v2\\static    root@<YOUR_ECS_IP>:/var/www/taixuan/"
+echo "  scp -r C:\\path\\to\\fortune-web-v2\\specs     root@<YOUR_ECS_IP>:/var/www/taixuan/"
+echo "  scp    C:\\path\\to\\fortune-web-v2\\requirements.txt root@<YOUR_ECS_IP>:/var/www/taixuan/"
 echo ""
 read -p "  文件上传完了吗?按 Enter 继续..." dummy
 
@@ -68,7 +73,7 @@ Type=simple
 User=$USER
 WorkingDirectory=/var/www/taixuan
 Environment="PATH=/var/www/taixuan/venv/bin"
-ExecStart=/var/www/taixuan/venv/bin/gunicorn -w 4 -b 127.0.0.1:5000 app:app
+ExecStart=/var/www/taixuan/venv/bin/gunicorn -w 2 -b 127.0.0.1:5000 app:app
 Restart=always
 RestartSec=3
 
@@ -90,7 +95,7 @@ echo "[6/7] 配置 Nginx..."
 sudo tee /etc/nginx/sites-available/taixuan > /dev/null <<'EOF'
 server {
     listen 80;
-    server_name wanxiangapp.xyz www.wanxiangapp.xyz 116.62.69.83;
+    server_name <YOUR_DOMAIN> www.<YOUR_DOMAIN>;
 
     client_max_body_size 10M;
 
@@ -120,9 +125,9 @@ sudo systemctl reload nginx
 echo ""
 echo "[7/7] SSL 证书(等域名解析生效后再跑)..."
 echo "  下一步:"
-echo "  1. 在阿里云 DNS 控制台,把 wanxiangapp.xyz 解析到 116.62.69.83"
+echo "  1. 在阿里云 DNS 控制台,把 <YOUR_DOMAIN> 解析到 <YOUR_ECS_IP>"
 echo "  2. 等 DNS 生效后(几分钟-24h),跑:"
-echo "     sudo certbot --nginx -d wanxiangapp.xyz -d www.wanxiangapp.xyz"
+echo "     sudo certbot --nginx -d <YOUR_DOMAIN> -d www.<YOUR_DOMAIN>"
 echo ""
 
 # ============================================================
@@ -135,7 +140,7 @@ echo "=========================================="
 echo ""
 echo "测试访问:"
 echo "  本地:curl http://127.0.0.1:5000/healthz"
-echo "  外部:http://116.62.69.83"
+echo "  外部:http://<YOUR_ECS_IP> 或 http://<YOUR_DOMAIN>"
 echo ""
 echo "看日志:"
 echo "  sudo journalctl -u taixuan -f"
@@ -143,9 +148,3 @@ echo "  tail -f /var/www/taixuan/logs/taixuan-web.log"
 echo ""
 echo "重启服务:"
 echo "  sudo systemctl restart taixuan"
-echo ""
-echo "下一步:"
-echo "  1. 在阿里云 DNS 解析 wanxiangapp.xyz → 116.62.69.83"
-echo "  2. 等 ICP 备案通过(若还在审核中)"
-echo "  3. 跑 certbot 申请 SSL"
-echo "  4. 浏览器访问 http://wanxiangapp.xyz"

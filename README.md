@@ -149,7 +149,6 @@ taixuan-web/
 ## 📮 联系
 
 - Issue: https://github.com/aidless/taixuan-web/issues
-- Email: liuzewen@qlnu.edu.cn
 
 ---
 
