@@ -113,9 +113,17 @@ class DeepSeekBackend:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 1500,
-    ) -> Generator[str, None, None]:
-        """流式 chat,逐 chunk yield text 片段。
-        DeepSeek API 兼容 OpenAI stream 协议:每行 data: {json},末尾 data: [DONE]
+    ) -> Generator[Dict[str, Any], None, None]:
+        """流式 chat,逐 chunk yield {"type": "...", "text": "..."}
+
+        DeepSeek reasoning 模型 (deepseek-v4-flash) 同时返回:
+        - reasoning_content: 思考过程(可隐藏或单独展示)
+        - content: 正文答案
+
+        type 取值:
+        - "reasoning": 思考阶段的 text
+        - "content": 答案 text
+        - "error": 流式错误
         """
         payload = {
             "model": self.model,
@@ -150,11 +158,15 @@ class DeepSeekBackend:
                     if not choices:
                         continue
                     delta = choices[0].get("delta", {})
-                    text = delta.get("content", "")
-                    if text:
-                        yield text
+                    # DeepSeek reasoning 模型:reasoning_content(思考)+ content(答案)
+                    reasoning_text = delta.get("reasoning_content", "")
+                    if reasoning_text:
+                        yield {"type": "reasoning", "text": reasoning_text}
+                    content_text = delta.get("content", "")
+                    if content_text:
+                        yield {"type": "content", "text": content_text}
         except Exception as e:
-            yield f"[STREAM_ERROR: {e}]"
+            yield {"type": "error", "text": f"[STREAM_ERROR: {e}]"}
 
     def prewarm(self) -> None:
         if self._prewarmed:
@@ -237,8 +249,8 @@ class OllamaQwenBackend:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 1500,
-    ) -> Generator[str, None, None]:
-        """Ollama 流式 API,逐行返回 NDJSON"""
+    ) -> Generator[Dict[str, Any], None, None]:
+        """Ollama 流式 API,逐行返回 NDJSON,统一包装成 {"type", "text"} 格式"""
         num_predict = max(max_tokens + 500, 2000)
         payload = {
             "model": self.model,
@@ -267,11 +279,11 @@ class OllamaQwenBackend:
                         continue
                     text = chunk.get("message", {}).get("content", "")
                     if text:
-                        yield text
+                        yield {"type": "content", "text": text}
                     if chunk.get("done"):
                         break
         except Exception as e:
-            yield f"[STREAM_ERROR: {e}]"
+            yield {"type": "error", "text": f"[STREAM_ERROR: {e}]"}
 
     def prewarm(self) -> None:
         if self._prewarmed:
@@ -327,8 +339,8 @@ class MockBackend:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 1500,
-    ) -> Generator[str, None, None]:
-        """Mock 也按字符流式 yield,模拟打字效果"""
+    ) -> Generator[Dict[str, Any], None, None]:
+        """Mock 也按字符流式 yield,统一格式"""
         text = (
             "【开发模式 · Mock 响应】\n\n"
             "感谢你的提问。当前服务器未配置 LLM API Key,"
@@ -338,9 +350,8 @@ class MockBackend:
             "- 或本地 Ollama + qwen3:4b 模型(兜底)\n\n"
             "本服务仅供文化参考与娱乐,不构成任何专业建议。"
         )
-        # 逐字 yield,模拟打字
         for ch in text:
-            yield ch
+            yield {"type": "content", "text": ch}
             time.sleep(0.005)
 
 
@@ -433,10 +444,10 @@ class LLMRouter:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 1500,
-    ) -> Generator[str, None, None]:
+    ) -> Generator[Dict[str, Any], None, None]:
         """流式调度:主路 → 失败 → 兜底 → mock
 
-        注意:主路失败标志是 yield [STREAM_ERROR: ...] 的 chunk
+        失败标志:chunk["type"] == "error" 且 chunk["text"] 含 [STREAM_ERROR
         """
         backend_used = "unknown"
         primary_failed = True
@@ -446,8 +457,8 @@ class LLMRouter:
             try:
                 had_chunk = False
                 for chunk in self.primary.chat_stream(messages, temperature, max_tokens):
-                    if chunk.startswith("[STREAM_ERROR"):
-                        raise RuntimeError(chunk)
+                    if isinstance(chunk, dict) and chunk.get("type") == "error":
+                        raise RuntimeError(chunk.get("text", ""))
                     had_chunk = True
                     yield chunk
                 if had_chunk:
@@ -463,8 +474,8 @@ class LLMRouter:
                 try:
                     had_chunk = False
                     for chunk in self.fallback.chat_stream(messages, temperature, max_tokens):
-                        if chunk.startswith("[STREAM_ERROR"):
-                            raise RuntimeError(chunk)
+                        if isinstance(chunk, dict) and chunk.get("type") == "error":
+                            raise RuntimeError(chunk.get("text", ""))
                         had_chunk = True
                         yield chunk
                     if had_chunk:

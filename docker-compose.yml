@@ -1,0 +1,45 @@
+# docker-compose.yml · taixuan-web
+# 生产部署:Flask + 共享 SQLite 日志目录
+
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: taixuan-web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # DeepSeek API key(从 .env 文件或环境变量读)
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.deepseek.com/v1}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      # 限流
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-10}
+      # Flask 生产模式
+      FLASK_DEBUG: "0"
+    volumes:
+      # 持久化日志 + SQLite 数据库
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 可选:umami 流量统计(v1.1.1)
+  # umami:
+  #   image: ghcr.io/umami-software/umami:postgresql-v2
+  #   ports:
+  #     - "127.0.0.1:3000:3000"
+  #   environment:
+  #     DATABASE_URL: postgresql://umami:umami@db:5432/umami
+  #   depends_on:
+  #     - db

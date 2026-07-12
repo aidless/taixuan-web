@@ -1,4 +1,4 @@
-﻿"""
+"""
 benchmark_llm.py · DeepSeek vs qwen3:4b 对比测试
 
 用法(临时设 env,不污染全局):
@@ -126,49 +126,13 @@ def score_response(text: str, prompt_spec: Dict) -> Dict[str, Any]:
         return {"len": 0, "chinese_pct": 0, "absolute_hits": 99, "compliance_hits": 99,
                 "json_valid": False, "length_score": 0, "compliance_score": 0, "composite": 0}
 
-    # 1. 长度
     text_len = len(text)
-
-    # 2. 中文占比
-    chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
-    chinese_pct = chinese_chars / max(len(text), 1)
-
-    # 3. 绝对化用词(出现越多越扣分)
+    chinese_pct = _chinese_ratio(text)
     absolute_hits = sum(text.count(w) for w in ABSOLUTE_WORDS)
-
-    # 4. 合规用词
     compliance_hits = sum(text.count(w) for w in COMPLIANCE_WORDS_LEVEL)
-
-    # 5. JSON 可解析
-    json_valid = False
-    if prompt_spec["dim"] == "结构化 JSON":
-        try:
-            # 找 JSON 边界(模型可能夹杂文字)
-            start = text.find("{")
-            end = text.rfind("}") + 1
-            if start >= 0 and end > start:
-                json.loads(text[start:end])
-                json_valid = True
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-    # 6. 长度期望分
-    if "-" in prompt_spec["expect_len"]:
-        lo, hi = prompt_spec["expect_len"].split("-")
-        lo, hi = int(lo), int(hi)
-        if lo <= text_len <= hi:
-            length_score = 1.0
-        elif text_len < lo:
-            length_score = max(0, text_len / lo)
-        else:
-            length_score = max(0, hi / text_len)
-    else:
-        length_score = 1.0
-
-    # 7. 合规分(0-1, 1 = 无任何禁词)
+    json_valid = _try_parse_json(text) if prompt_spec["dim"] == "结构化 JSON" else False
+    length_score = _length_score(text_len, prompt_spec["expect_len"])
     compliance_score = max(0, 1.0 - (absolute_hits + compliance_hits) * 0.2)
-
-    # 综合分(加权)
     composite = (
         chinese_pct * 0.15
         + length_score * 0.25
@@ -186,6 +150,40 @@ def score_response(text: str, prompt_spec: Dict) -> Dict[str, Any]:
         "compliance_score": round(compliance_score, 3),
         "composite": round(composite, 3),
     }
+
+
+def _chinese_ratio(text: str) -> float:
+    """计算文本中中文字符占比"""
+    if not text:
+        return 0.0
+    chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+    return chinese_chars / len(text)
+
+
+def _try_parse_json(text: str) -> bool:
+    """尝试从文本中提取并解析 JSON 块"""
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    if start < 0 or end <= start:
+        return False
+    try:
+        json.loads(text[start:end])
+        return True
+    except (json.JSONDecodeError, ValueError):
+        return False
+
+
+def _length_score(text_len: int, expect_len: str) -> float:
+    """根据期望长度区间计算得分(0-1)"""
+    if "-" not in expect_len:
+        return 1.0
+    lo, hi = expect_len.split("-")
+    lo, hi = int(lo), int(hi)
+    if lo <= text_len <= hi:
+        return 1.0
+    if text_len < lo:
+        return max(0, text_len / lo)
+    return max(0, hi / text_len)
 
 
 # ====================================================================

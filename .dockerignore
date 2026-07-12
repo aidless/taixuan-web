@@ -1,0 +1,24 @@
+# 不要打进 Docker 镜像的文件
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+.env
+.venv
+venv/
+logs/
+*.db
+*.log
+_archive/
+tests/
+*.md
+!README.md
+!DEPLOY.md
+DEPLOY.md
+ROADMAP.md
+.obsidian
+node_modules
+*.zip
+*.tar.gz
+.DS_Store

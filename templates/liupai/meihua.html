@@ -45,11 +45,13 @@
   <div id="loading" class="loading hidden">
     <div class="spinner"></div>
     <p>正在为你推演 · 通常 5-15 秒</p>
+    <button type="button" id="abort-btn" class="abort-btn">停止</button>
   </div>
 
   <div id="result" class="result hidden">
     <h2 class="result-title">解读结果</h2>
     <div id="result-meta" class="result-meta"></div>
+    <div id="result-reasoning" class="result-reasoning hidden"></div>
     <div id="result-text" class="result-text"></div>
     <div id="result-disclaimer" class="result-disclaimer"></div>
     <button class="retry-btn" onclick="location.reload()">再问一次</button>
@@ -90,29 +92,68 @@ document.getElementById('reading-form').addEventListener('submit', async functio
   submitBtn.textContent = '推演中...';
   loading.classList.remove('hidden');
 
+
+  // 中止按钮
+  const abortBtn = document.getElementById('abort-btn');
+  let currentController = null;
+  abortBtn.onclick = () => {
+    if (currentController) {
+      currentController.abort();
+      loading.classList.add('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = '开始推演';
+      abortBtn.onclick = null;
+    }
+  };
+
   // 准备结果区
   const resultText = document.getElementById('result-text');
   const resultMeta = document.getElementById('result-meta');
+  const resultReasoning = document.getElementById('result-reasoning');
   const resultDisclaimer = document.getElementById('result-disclaimer');
   resultText.textContent = '';
+  resultReasoning.textContent = '';
+  resultReasoning.classList.add('hidden');
   resultMeta.textContent = '派别:{{ liupai_name }} · 流式生成中...';
   resultDisclaimer.textContent = '';
   result.classList.remove('hidden');
 
-  // 调用流式接口
-  await streamReading(
-    '{{ liupai }}',
-    formData,
-    (chunk) => { resultText.textContent += chunk; },
-    (data) => {
+  let contentChars = 0;
+  let reasoningChars = 0;
+
+  await streamReading('{{ liupai }}', formData, {
+    onStart: (data) => { resultMeta.textContent = '派别:{{ liupai_name }} · 流式生成中...'; },
+    onReasoning: (text) => {
+      reasoningChars += text.length;
+      if (!resultReasoning.classList.contains('visible')) {
+        resultReasoning.classList.remove('hidden');
+        resultReasoning.classList.add('visible');
+        resultReasoning.textContent = '思考中...';
+      } else {
+        resultReasoning.textContent = '思考中... (' + reasoningChars + ' 字)';
+      }
+    },
+    onContent: (text, chunkCount) => {
+      contentChars += text.length;
+      resultText.textContent += text;
+      resultMeta.textContent = '派别:{{ liupai_name }} · 流式中: ' + chunkCount + ' chunks / ' + contentChars + ' 字';
+    },
+    onDone: (data) => {
       loading.classList.add('hidden');
       submitBtn.disabled = false;
-      submitBtn.textContent = '开始推演';
-      resultMeta.textContent = `派别:{{ liupai_name }} · 耗时:${data.latency_sec.toFixed(1)}s`;
+      submitBtn.textContent = '再推一次';
+      resultMeta.textContent = '派别:{{ liupai_name }} · 耗时:' + data.latency_sec.toFixed(1) + 's · ' + data.chunk_count + ' chunks · ' + contentChars + ' 字' + (data.reasoning_text ? ' · 思考过程 ' + reasoningChars + ' 字' : '');
       resultDisclaimer.textContent = data.disclaimer || '';
+      if (data.reasoning_text) {
+        resultReasoning.textContent = '思考过程(' + reasoningChars + ' 字):
+
+' + data.reasoning_text.substring(0, 500) + (data.reasoning_text.length > 500 ? '...(展开)' : '');
+      } else {
+        resultReasoning.classList.add('hidden');
+      }
       resultText.scrollTop = resultText.scrollHeight;
     },
-    (err) => {
+    onError: (err) => {
       loading.classList.add('hidden');
       submitBtn.disabled = false;
       submitBtn.textContent = '开始推演';
@@ -120,7 +161,8 @@ document.getElementById('reading-form').addEventListener('submit', async functio
       errorBox.classList.remove('hidden');
       errorBox.scrollIntoView({ behavior: 'smooth' });
     }
-  );
+  });
+});;
 });
 </script>
 <script src="{{ url_for('static', filename='js/stream.js') }}"></script>
