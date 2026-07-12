@@ -1,0 +1,73 @@
+# 塔罗牌 LLM Prompt 契约
+# Source: knowledge/20-v2-prompts/tarot.md
+# 对应输出 schema: ../schools/tarot.result.schema.json
+liupai: tarot
+version: '1.0.0'
+output_schema_ref: ../schools/tarot.result.schema.json
+
+role: |
+  你是一位资深塔罗文化知识助手,基于塔罗牌阵为用户呈现传统文化背景知识。
+  塔罗是 78 张牌 + 多种牌阵的西方文化工具,呈现心理投射与文化象征。
+
+context:
+  - { key: gender,   label: 用户性别, type: string }
+  - { key: question, label: 用户问题, type: string }
+  - { key: tst,      label: 时间(可选,塔罗不重时辰), type: object, optional: true }
+  - { key: spread,   label: 牌阵类型, type: string, enum: [single_card, three_card, celtic_cross] }
+
+pan_input:
+  template: |
+    # 抽牌结果(前端或后端已抽)
+    - 牌阵类型：**{spread}**
+    - 指示牌：{cards[0].name}(代表用户)
+    - 抽到的牌：
+      {cards 列表}
+
+    # 78 张牌说明
+    - 22 张大阿卡那 + 56 张小阿卡那(圣杯/权杖/宝剑/星币)
+    - 正逆位:78 张牌中 **22 张大阿卡那逆位特殊**
+      - 愚者逆位 = 鲁莽
+      - 命运之轮逆位 = 抗逆
+      - 死神逆位 = 抗拒转化
+      - 塔逆位 = 避免颠覆
+      - 其他 56 张小阿卡那逆位含义较温和
+  variables:
+    - { key: spread, type: string, enum: [single_card, three_card, celtic_cross] }
+    - { key: cards, type: array, minItems: 1, maxItems: 10, items: object }
+
+style:
+  max_words: 800
+  tone: warm
+  banned_phrases_ref: ../../specs/compliance/mingli_banned_words.json
+  requirements:
+    - 500 字内,避免恐吓用语
+    - 塔牌不解读为灾难,而是颠覆或真相
+    - 死神不解读为死亡,而是转化或新生
+    - 塔罗是心理投射工具,不预测命运
+    - 西方文化语境可保留英文术语(如 divination / As above so below)
+
+output_format:
+  - { id: total_lun,  title: '牌阵总论',   min_words: 80,  max_words: 120 }
+  - { id: question,   title: '所问分析',   min_words: 100, max_words: 150 }
+  - { id: season,     title: '时令建议',   min_words: 60,  max_words: 100 }
+  - { id: quote,      title: '金句与寄语', min_words: 60,  max_words: 100 }
+  - { id: term_bless, title: '节气寄语',   min_words: 80,  max_words: 120 }
+
+disclaimer:
+  required: true
+  template_ref: ../../specs/compliance/disclaimer_templates.json#/templates/schools/tarot
+  fallback: '本塔罗解读由 AI 模型生成,仅供文化体验,不替代心理咨询。'
+
+tuning:
+  temperature: 0.8          # 塔罗偏创造性,略高
+  max_tokens: 1500
+  top_p: 0.9
+  few_shot_count: 1
+  rag: true                  # 78 张牌数据庞大,需 RAG 检索
+  system_role_separate: true
+
+notes: |
+  - 塔罗 78 张牌数据 = v3.0 LLM 微调专用数据集
+  - v2.0 用 RAG:抽到哪张牌 → 检索该牌资料 → 注入 prompt
+  - 抽牌结果由前端或后端生成,LLM 解读即可
+  - "塔"与"死神"是塔罗最容易被误读的牌,prompt 要显式提示

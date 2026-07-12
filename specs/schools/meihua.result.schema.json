@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "taixuan://specs/schools/meihua.result.schema.json",
+  "title": "梅花易数解读结果契约",
+  "description": "8 派结果 schema 之一。梅花以 体用 + 互卦 + 变卦 + 五行生克为核心,起卦方式灵活。",
+  "version": "1.0.0",
+  "source": "knowledge/20-v2-prompts/meihua.md + knowledge/05-meihua.md + utils/liupai-reader.js",
+  "type": "object",
+  "required": ["summary", "sections", "disclaimer", "schema_version", "gua"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "summary": {"type": "string", "minLength": 20, "maxLength": 200},
+    "gua": {
+      "type": "object",
+      "description": "卦象集合",
+      "required": ["benGua", "huGua", "bianGua"],
+      "properties": {
+        "benGua": {"type": "string", "description": "本卦"},
+        "huGua": {"type": "string", "description": "互卦"},
+        "bianGua": {"type": "string", "description": "变卦"},
+        "tiWu": {
+          "type": "object",
+          "description": "体用关系",
+          "required": ["ti", "yong", "shengKe"],
+          "properties": {
+            "ti": {"type": "string", "description": "体卦五行"},
+            "yong": {"type": "string", "description": "用卦五行"},
+            "shengKe": {"enum": ["体克用", "用克体", "体生用", "用生体", "体用比和"]}
+          }
+        }
+      }
+    },
+    "qiGuaMethod": {
+      "enum": ["时间起卦", "数字起卦", "声音起卦", "方位起卦", "物象起卦"],
+      "description": "起卦方式"
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["title", "content", "tone"],
+        "properties": {
+          "title": {"type": "string", "maxLength": 30},
+          "content": {"type": "string", "minLength": 30, "maxLength": 500},
+          "tone": {"enum": ["neutral", "warm", "cautious"]},
+          "keyPoints": {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 50}}
+        }
+      }
+    },
+    "dayMaster": {"type": "string"},
+    "disclaimer": {"type": "string", "minLength": 20}
+  },
+  "compliance_constraints": {
+    "no_absolute_predictions": "禁用 必定 / 一定 / 100% / 必然",
+    "no_fatalism": "禁用 大凶 / 必死 / 无解",
+    "no_redirection_words": "禁用 算命 / 占卜 / 预测命运 / 改运",
+    "must_have_disclaimer": "disclaimer 不可为空"
+  }
+}

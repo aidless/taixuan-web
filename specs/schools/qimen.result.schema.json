@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "taixuan://specs/schools/qimen.result.schema.json",
+  "title": "奇门遁甲解读结果契约",
+  "description": "8 派结果 schema 之一。奇门以 九宫 + 三奇(乙丙丁) + 六仪 + 八门 + 九星为核心。",
+  "version": "1.0.0",
+  "source": "knowledge/20-v2-prompts/qimen.md + knowledge/03-qimen.md + utils/liupai-reader.js",
+  "type": "object",
+  "required": ["summary", "sections", "disclaimer", "schema_version", "pan"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "summary": {"type": "string", "minLength": 20, "maxLength": 200},
+    "pan": {
+      "type": "object",
+      "description": "奇门时家盘(真太阳时起局)",
+      "required": ["juShi", "yuan", "shiErZhi"],
+      "properties": {
+        "juShi": {"type": "string", "description": "局数,如 '阳遁一局'"},
+        "yuan": {"enum": ["阳遁", "阴遁"]},
+        "shiErZhi": {"type": "string", "description": "用事时辰,如 '甲子时'"},
+        "panType": {"enum": ["时家奇门", "日家奇门", "月家奇门", "年家奇门"]}
+      }
+    },
+    "nineGong": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "description": "九宫落宫(中宫 + 8 方位)",
+      "items": {
+        "type": "object",
+        "required": ["gong", "star", "men"],
+        "properties": {
+          "gong": {"enum": ["坎一宫", "坤二宫", "震三宫", "巽四宫", "中五宫", "乾六宫", "兑七宫", "艮八宫", "离九宫"]},
+          "star": {"enum": ["天蓬", "天芮", "天冲", "天辅", "天禽", "天心", "天柱", "天任", "天英"]},
+          "men": {"enum": ["休门", "生门", "伤门", "杜门", "景门", "死门", "惊门", "开门"]},
+          "yiShen": {"enum": ["值符", "腾蛇", "太阴", "六合", "白虎", "玄武", "九地", "九天"]},
+          "zhuYong": {"type": "boolean", "description": "是否用神落宫"}
+        }
+      }
+    },
+    "yongShen": {
+      "type": "string",
+      "description": "用神天干,如 '乙'(奇)、'戊'(中)",
+      "enum": ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"]
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["title", "content", "tone"],
+        "properties": {
+          "title": {"type": "string", "maxLength": 30},
+          "content": {"type": "string", "minLength": 30, "maxLength": 500},
+          "tone": {"enum": ["neutral", "warm", "cautious"]},
+          "keyPoints": {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 50}}
+        }
+      }
+    },
+    "dayMaster": {"type": "string"},
+    "disclaimer": {"type": "string", "minLength": 20}
+  },
+  "compliance_constraints": {
+    "no_absolute_predictions": "禁用 必定 / 一定 / 100% / 必然",
+    "no_fatalism": "禁用 大凶 / 必死",
+    "no_redirection_words": "禁用 算命 / 占卜 / 预测命运 / 改运",
+    "must_have_disclaimer": "disclaimer 不可为空"
+  }
+}

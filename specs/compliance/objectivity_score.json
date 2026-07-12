@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "客观性评分维度",
+  "description": "check-objective-language.js v5 的 6 维度评分权重配置。0-100 分制,< 60 = block(不可上线),< 80 = warning(建议 review)。",
+  "version": "1.0.0",
+  "source": "tests/check-objective-language.js v5 calcScore() (2026-07-11 fa013b1)",
+  "dimensions": {
+    "compliance_block": {
+      "label": "合规红线(广告法/微信红线/宿命论)",
+      "weight": 1.0,
+      "blocks_release": true,
+      "rationale": "命中即审核驳回,v4 scanner 直接阻断"
+    },
+    "soft_warn": {
+      "label": "软警戒(命中建议人工 review)",
+      "weight": 0.1,
+      "blocks_release": false,
+      "rationale": "软警戒词不直接违规,允许豁免(例:表单「选填」)"
+    },
+    "tone_strong": {
+      "label": "语气强(moderate 已豁免,strong 算扣分)",
+      "weight": 0.1,
+      "blocks_release": false,
+      "rationale": "命理需要权威感,语气过软失信,strong 扣分"
+    },
+    "tone_urgent": {
+      "label": "语气命令(强制/必须 类)",
+      "weight": 0.05,
+      "blocks_release": false,
+      "rationale": "表单/合规文本需要命令式,轻扣分"
+    },
+    "tone_moderate": {
+      "label": "语气建议(轻微,豁免列表内)",
+      "weight": 0.01,
+      "blocks_release": false,
+      "rationale": "几乎不影响,豁免后应 0 命中"
+    },
+    "ai_marker": {
+      "label": "AI 身份暴露(ChatGPT/DeepSeek 等)",
+      "weight": 1.0,
+      "blocks_release": true,
+      "rationale": "ai-005/006/007 红线"
+    }
+  },
+  "rating_thresholds": {
+    "green": ">= 80",
+    "yellow": "60-79",
+    "red": "< 60"
+  }
+}

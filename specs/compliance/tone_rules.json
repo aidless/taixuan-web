@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "语气软化规则(分层)",
+  "description": "从 audit-wxml-tone.js v1.9.3 提炼的 3 级语气词表(moderate/strong/urgent)。与 mingli_banned_words 不同,本规则 **不阻塞 release**,只报告 — 命理解读本身需要权威感,语气词过软反而失去信任。",
+  "version": "1.0.0",
+  "source": "tests/audit-wxml-tone.js v1.9.3(v4 分级)",
+  "scope": ["wxml", "js_template_strings", "rendered_text"],
+  "rules": {
+    "moderate": {
+      "label": "轻(可改,影响微弱)",
+      "blocks_release": false,
+      "patterns": [
+        { "kw": "必填", "fix": "改为「请填写」或「选填」" },
+        { "kw": "选填", "fix": "已为软化表述,无需改(exceptions 中允许)" },
+        { "kw": "必需", "fix": "改为「请提供」或「可选」" },
+        { "kw": "务必", "fix": "改为「建议」或「尽量」" },
+        { "kw": "请在", "fix": "改为「请先...再...」或省略" }
+      ]
+    },
+    "strong": {
+      "label": "中(建议改,影响可感知)",
+      "blocks_release": false,
+      "patterns": [
+        { "kw": "必须", "fix": "改为「建议」或「需要」" },
+        { "kw": "立即", "fix": "改为「尽快」或「建议」" },
+        { "kw": "马上", "fix": "改为「尽快」或「建议」" },
+        { "kw": "强制", "fix": "改为「必填」或「必选」(注意:在表单语义下「强制」可接受)" }
+      ]
+    },
+    "urgent": {
+      "label": "高(必须改,严重失仪)",
+      "blocks_release": false,
+      "patterns": [
+        { "kw": "不能", "fix": "看上下文,可改为「暂不支持」" },
+        { "kw": "不可", "fix": "看上下文,可改为「暂不支持」" },
+        { "kw": "否则", "fix": "改为「如果不这样...」或省略" },
+        { "kw": "不然", "fix": "改为「如果不这样...」或省略" }
+      ]
+    }
+  },
+  "exceptions": [
+    {
+      "pattern": "表单字段标注",
+      "allow": ["必填", "选填", "必须"],
+      "note": "表单语义的「必填」「必须」是功能性提示,不视为语气过强"
+    },
+    {
+      "pattern": "合规声明",
+      "allow": ["必须", "不能"],
+      "note": "「你必须同意隐私政策」类合规文本需要命令语气"
+    }
+  ],
+  "rationale": "与 mingli_banned_words 不同,语气规则不阻塞 release。原因:\n1. 命理解读需要权威感,过度软化反而失信\n2. 部分表单/合规文本必须用命令式\n3. 语气优化是质量提升项,不是合规底线\n   脚本应报告但不失败(exit 0),让下一位 agent 决定是否改。",
+  "scanner_behavior": {
+    "implementation_ref": "tests/audit-wxml-tone.js(待升级读本文件)",
+    "exit_code": 0,
+    "report_only": true
+  }
+}

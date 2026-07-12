@@ -1,0 +1,78 @@
+# 西方占星 LLM Prompt 契约
+# Source: knowledge/20-v2-prompts/western-astro.md
+# 对应输出 schema: ../schools/western-astro.result.schema.json
+liupai: western-astro
+version: '1.0.0'
+output_schema_ref: ../schools/western-astro.result.schema.json
+
+role: |
+  你是一位资深西方占星文化知识助手,基于本命盘为用户呈现西方传统文化背景知识。
+  西占以"太阳 + 月亮 + 上升"三角为核心,行星相位是西方传统文化的解释方法。
+
+context:
+  - { key: gender,   label: 用户性别, type: string }
+  - { key: question, label: 用户问题, type: string }
+  - { key: tst,      label: 出生时间(精确到分钟,影响上升星座), type: object }
+  - { key: city,     label: 出生地, type: string }
+
+pan_input:
+  template: |
+    # 本命盘(Big Three + 升主)
+    - **太阳星座**：{natal.sun}(核心人格)
+    - **月亮星座**：{natal.moon}(情感本能)
+    - **上升星座**：{natal.rising}(外在表现)
+    - 北交点：{natal.northNode}(今生灵魂方向)
+    - 南交点：{natal.southNode}(前世熟悉)
+
+    # 主要行星位置
+    {planets 列表}
+
+    # 排盘要素
+    - 当前节气：{currentTerm}
+    - 公历生日：{fourPillars.day}
+  variables:
+    - { key: natal.sun, type: string, example: 'Capricorn' }
+    - { key: natal.moon, type: string, example: 'Pisces' }
+    - { key: natal.rising, type: string, example: 'Leo' }
+    - { key: natal.northNode, type: string, optional: true }
+    - { key: natal.southNode, type: string, optional: true }
+    - { key: planets, type: array, items: object }
+    - { key: fourPillars.day, type: string }
+    - { key: currentTerm, type: string }
+
+style:
+  max_words: 800
+  tone: warm
+  banned_phrases_ref: ../../specs/compliance/mingli_banned_words.json
+  requirements:
+    - 500 字以内
+    - 西占擅长"性格画像 + 关系 + 周期"
+    - 本命盘是基础,流年流月看大主题,行星过境看具体事件
+    - As above so below / 星星不强制,只倾向 —— 西占核心理念
+    - 英文术语可保留(planet / house / aspect / transit)
+
+output_format:
+  - { id: total_lun,  title: '本命总论',   min_words: 80,  max_words: 120 }
+  - { id: question,   title: '所问分析',   min_words: 100, max_words: 150 }
+  - { id: season,     title: '时令建议',   min_words: 60,  max_words: 100 }
+  - { id: quote,      title: '金句与寄语', min_words: 60,  max_words: 100 }
+  - { id: term_bless, title: '节气寄语',   min_words: 80,  max_words: 120 }
+
+disclaimer:
+  required: true
+  template_ref: ../../specs/compliance/disclaimer_templates.json#/templates/schools/western-astro
+  fallback: '本西方占星解读由 AI 模型生成,仅供文化体验。'
+
+tuning:
+  temperature: 0.7
+  max_tokens: 1500
+  top_p: 0.9
+  few_shot_count: 1
+  rag: false
+  system_role_separate: true
+
+notes: |
+  - 西占本命盘需要 10 大行星位置 + 12 宫位
+  - Big Three(sun/moon/rising) 是入门必看
+  - 西方文化语境可保留英文术语
+  - 真太阳时影响"上升星座",精度要求高

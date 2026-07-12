@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "taixuan://specs/schools/vedic.result.schema.json",
+  "title": "吠陀占星解读结果契约",
+  "description": "8 派结果 schema 之一。吠陀以 Lagna(命宫) + Nakshatra(星宿) + Dasa(大运) + 27 宿为核心。",
+  "version": "1.0.0",
+  "source": "knowledge/20-v2-prompts/vedic.md + knowledge/08-vedic.md + utils/liupai-reader.js",
+  "type": "object",
+  "required": ["summary", "sections", "disclaimer", "schema_version", "lagna"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "summary": {"type": "string", "minLength": 20, "maxLength": 200},
+    "lagna": {
+      "type": "object",
+      "description": "Lagna(命宫)与月亮星宿",
+      "required": ["ascendant", "moonNakshatra", "currentDasa"],
+      "properties": {
+        "ascendant": {"type": "string", "description": "上升星座(吠陀 sidereal)"},
+        "moonNakshatra": {
+          "type": "string",
+          "enum": [
+            "Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra", "Punarvasu", "Pushya", "Ashlesha",
+            "Magha", "Phalguni", "Uttara Phalguni", "Hasta", "Chitra", "Swati", "Vishakha", "Anuradha", "Jyeshtha",
+            "Mula", "Purva Ashadha", "Uttara Ashadha", "Shravana", "Dhanishta", "Shatabhisha", "Purva Bhadrapada",
+            "Uttara Bhadrapada", "Revati"
+          ]
+        },
+        "moonRashi": {"type": "string", "description": "月亮所在 Rashi"},
+        "currentDasa": {
+          "type": "object",
+          "required": ["planet", "remainingYears"],
+          "properties": {
+            "planet": {"enum": ["Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury", "Ketu", "Venus"]},
+            "remainingYears": {"type": "number", "minimum": 0, "maximum": 120}
+          }
+        }
+      }
+    },
+    "doshas": {
+      "type": "array",
+      "description": "Doshas(吠陀业力分析)",
+      "items": {
+        "type": "object",
+        "required": ["type", "present"],
+        "properties": {
+          "type": {"enum": ["Manglik", "Kaal Sarpa", "Sade Sati", "Pitra", "Nadi"]},
+          "present": {"type": "boolean"},
+          "remedy": {"type": "string", "maxLength": 200, "description": "传统调和方式"}
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["title", "content", "tone"],
+        "properties": {
+          "title": {"type": "string", "maxLength": 30},
+          "content": {"type": "string", "minLength": 30, "maxLength": 500},
+          "tone": {"enum": ["neutral", "warm", "cautious"]},
+          "keyPoints": {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 50}}
+        }
+      }
+    },
+    "dayMaster": {"type": "string"},
+    "disclaimer": {"type": "string", "minLength": 20}
+  },
+  "compliance_constraints": {
+    "no_absolute_predictions": "禁用 必定 / 一定 / 100% / 必然",
+    "no_fatalism": "禁用 大凶 / 必死",
+    "no_redirection_words": "禁用 算命 / 占卜 / 预测命运 / 改运",
+    "must_have_disclaimer": "disclaimer 不可为空",
+    "english_ok": "Karma / Dharma / Lagna / Nakshatra / Dasa 等梵语/英语术语可保留"
+  }
+}
