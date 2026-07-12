@@ -21,6 +21,30 @@
 
 ---
 
+## 当前状态 v1.1(已完成,2026-07-12 当晚)
+
+| 模块 | 状态 | 详情 |
+|---|---|---|
+| 流式输出 SSE | 完成 | 8 派全跑,后端 reading_stream + 前端 streamReading |
+| 用户体感提升 | 完成 | 第 1 秒开始有字,vs 之前等 15 秒 |
+| LLM 调用方式 | 不变 | 还是 DeepSeek v4-flash |
+| 端到端验证 | 完成 | 浏览器实测流式打字机效果正常 |
+| GitHub 推送 | 完成 | commit `188fba7` |
+
+**v1.1 改动统计**:
+- llm_backends.py +140 行(4 个 chat_stream 方法)
+- app.py +65 行(reading_stream SSE 路由)
+- static/js/stream.js 67 行(公共流式客户端,新建)
+- templates/liupai/*.html × 8(JS 段 fetch → streamReading)
+- ROADMAP.md 新建
+- **总计 +953 行 / -250 行**
+
+**v1.1 bug 修复**:
+- app.py:LIUPAI 名字错 → 改用 LIUPAI_IDS
+- app.py:build_messages 参数错 → (name, form_data)
+
+---
+
 ## 未来版本
 
 ### v1.1 — 用户体验层(预计 1-2 周)
@@ -29,7 +53,26 @@
 
 #### 1. 流式输出 SSE(Server-Sent Events)
 
-**优先级**:最高
+**状态**:✅ **已完成** (commit `188fba7`,2026-07-12)
+
+**实际效果**:
+- 用户提交表单后,第 1 秒开始有字
+- 后端 LLM 调用方式不变(DeepSeek v4-flash)
+- 只是改变推送方式:逐 token yield,前端边收边渲染
+
+**实施细节**:
+
+| # | 任务 | 工作量 | 文件 | 状态 |
+|---|---|---:|---|---|
+| 1 | DeepSeekBackend 加 chat_stream() | 30 min | `llm_backends.py` | ✅ |
+| 2 | OllamaBackend 加 chat_stream() | 20 min | `llm_backends.py` | ✅ |
+| 3 | MockBackend 加 chat_stream() | 10 min | `llm_backends.py` | ✅ |
+| 4 | LLMRouter 加 chat_stream() 调度 | 30 min | `llm_backends.py` | ✅ |
+| 5 | Flask 加 /reading_stream SSE 路由 | 30 min | `app.py` | ✅ |
+| 6 | 公共流式客户端 streamReading | 30 min | `static/js/stream.js` | ✅ |
+| 7 | 8 派 HTML 改 JS 段 | 40 min | `templates/liupai/*.html` | ✅ |
+| 8 | 端到端测试 + 调试 + 修 2 个 bug | 60 min | - | ✅ |
+| **总计** | | **~3.5h** | | |
 
 **痛点**:当前用户提交表单后,看到 5-15 秒转圈,然后一大坨文字突然刷出。LLM 实际在实时生成,但用户感知是"等待 + 突然出现"。
 
