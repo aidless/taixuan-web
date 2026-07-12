@@ -1,4 +1,4 @@
-# specs/prompts/ · 8 派 LLM Prompt 结构化契约
+﻿# specs/prompts/ · 8 派 LLM Prompt 结构化契约
 
 > **目的**:把 `knowledge/20-v2-prompts/*.md` 的"人类可读叙事"转化为"机器可加载"的 YAML 契约
 > **状态**:v1.0.0(2026-07-10 启动)
@@ -125,14 +125,14 @@ const spec = yaml.load(fs.readFileSync('specs/prompts/bazi.yaml', 'utf8'));
 
 | 文件 | 流派 | 状态 |
 |---|---|---|
-| `bazi.yaml` | 八字 | ✅ v1.0 |
-| `ziwei.yaml` | 紫微 | ✅ v1.0 |
-| `qimen.yaml` | 奇门 | ✅ v1.0 |
-| `liuyao.yaml` | 六爻 | ✅ v1.0 |
-| `meihua.yaml` | 梅花 | ✅ v1.0 |
-| `tarot.yaml` | 塔罗 | ✅ v1.0 |
-| `western-astro.yaml` | 西占 | ✅ v1.0 |
-| `vedic.yaml` | 吠陀 | ✅ v1.0 |
+| `bazi.yaml` | 八字 | [v1.0] |
+| `ziwei.yaml` | 紫微 | [v1.0] |
+| `qimen.yaml` | 奇门 | [v1.0] |
+| `liuyao.yaml` | 六爻 | [v1.0] |
+| `meihua.yaml` | 梅花 | [v1.0] |
+| `tarot.yaml` | 塔罗 | [v1.0] |
+| `western-astro.yaml` | 西占 | [v1.0] |
+| `vedic.yaml` | 吠陀 | [v1.0] |
 
 ## 校验
 

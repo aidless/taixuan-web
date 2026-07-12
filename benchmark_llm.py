@@ -1,4 +1,4 @@
-"""
+﻿"""
 benchmark_llm.py · DeepSeek vs qwen3:4b 对比测试
 
 用法(临时设 env,不污染全局):
@@ -205,14 +205,14 @@ def run_benchmark(runs_per_prompt: int = 3, use_deepseek: bool = True) -> Dict[s
             backends["deepseek"] = DeepSeekBackend(model="deepseek-v4-flash")
             print(f"  deepseek: model={backends['deepseek'].model}, base={backends['deepseek'].api_base[:40]}")
         except Exception as e:
-            print(f"  deepseek: ❌ 初始化失败 {e}")
+            print(f"  deepseek: [FAIL] 初始化失败 {e}")
             print(f"  (DeepSeek 调用会跳过)")
 
     try:
         backends["qwen3_4b"] = OllamaQwen3Backend()
         print(f"  qwen3:4b: model={backends['qwen3_4b'].model}")
     except Exception as e:
-        print(f"  qwen3:4b: ❌ 初始化失败 {e}")
+        print(f"  qwen3:4b: [FAIL] 初始化失败 {e}")
         return results
 
     # Prewarm
@@ -266,7 +266,7 @@ def run_benchmark(runs_per_prompt: int = 3, use_deepseek: bool = True) -> Dict[s
                         "error": f"{type(e).__name__}: {str(e)[:200]}",
                         "latency_sec": latency,
                     })
-                    print(f"#{run_idx+1}(❌ {type(e).__name__})", end=" ")
+                    print(f"#{run_idx+1}([FAIL] {type(e).__name__})", end=" ")
 
             # 聚合
             successful = [r for r in runs if "score" in r]
@@ -333,7 +333,7 @@ def render_markdown_report(results: Dict) -> str:
     lines.append(f"- 每个 prompt 跑 {results['runs_per_prompt']} 次\n")
 
     # 1. 总分对比
-    lines.append("## 🏆 总分对比\n")
+    lines.append("## [Score] 总分对比\n")
     if results.get("overall"):
         lines.append("| Backend | 综合分(加权) | 平均分 | 合规分 | JSON 可解析率 | 平均延迟 |")
         lines.append("|---|---|---|---|---|---|")
@@ -342,7 +342,7 @@ def render_markdown_report(results: Dict) -> str:
         lines.append("")
 
     # 2. 分维度对比
-    lines.append("## 📊 分维度对比\n")
+    lines.append("## [Stats] 分维度对比\n")
     lines.append("| 维度 | Prompt ID | DeepSeek | qwen3:4b | 胜者 |")
     lines.append("|---|---|---|---|---|")
     for p in results["prompts"]:
@@ -365,7 +365,7 @@ def render_markdown_report(results: Dict) -> str:
     lines.append("")
 
     # 3. 原文样例(每个 prompt 各取第一跑)
-    lines.append("## 📝 原文样例(每个 prompt 第一跑)\n")
+    lines.append("## [Sample] 原文样例(每个 prompt 第一跑)\n")
     for p in results["prompts"]:
         lines.append(f"### {p['id']} ({p['dim']})\n")
         lines.append(f"**输入**:`{p['user'][:80]}...`")
@@ -376,7 +376,7 @@ def render_markdown_report(results: Dict) -> str:
             lines.append(f"#### [{backend_name}]")
             run = backend_data["runs"][0]
             if "error" in run:
-                lines.append(f"❌ 错误:`{run['error']}`")
+                lines.append(f"[FAIL] 错误:`{run['error']}`")
             else:
                 lines.append(f"- 长度:{run['score']['len']}")
                 lines.append(f"- 中文占比:{run['score']['chinese_pct']*100:.0f}%")
@@ -388,7 +388,7 @@ def render_markdown_report(results: Dict) -> str:
             lines.append("")
 
     # 4. 结论
-    lines.append("## 🎯 自动结论\n")
+    lines.append("## [Verdict] 自动结论\n")
     if results.get("overall"):
         best = max(results["overall"].items(), key=lambda x: x[1]["weighted_composite"])
         worst = min(results["overall"].items(), key=lambda x: x[1]["weighted_composite"])
@@ -400,7 +400,7 @@ def render_markdown_report(results: Dict) -> str:
             ds_json = results["overall"]["deepseek"]["json_valid_rate_overall"]
             qw_json = results["overall"]["qwen3_4b"]["json_valid_rate_overall"]
             if qw_json < 0.5 and ds_json > 0.8:
-                lines.append(f"- ⚠️ **JSON 能力差距显著**:DeepSeek {ds_json*100:.0f}% vs qwen3:4b {qw_json*100:.0f}% → 结构化输出 qwen3 不可靠")
+                lines.append(f"- [WARN] **JSON 能力差距显著**:DeepSeek {ds_json*100:.0f}% vs qwen3:4b {qw_json*100:.0f}% → 结构化输出 qwen3 不可靠")
             elif abs(ds_json - qw_json) < 0.2:
                 lines.append(f"- JSON 能力相近(DeepSeek {ds_json*100:.0f}% vs qwen3 {qw_json*100:.0f}%)")
         lines.append("")
@@ -437,7 +437,7 @@ def main():
     print(f"[OK] Markdown: {args.out_md}")
 
     # 控制台简报
-    print("\n" + md.split("## 🎯 自动结论")[0])
+    print("\n" + md.split("## [Verdict] 自动结论")[0])
 
 
 if __name__ == "__main__":
