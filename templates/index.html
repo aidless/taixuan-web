@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+  <h1 class="hero-title">泰玄 · 传统文化工具箱</h1>
+  <p class="hero-sub">八派合参 · 算法推演 · 文化参考</p>
+  <p class="hero-tip">本服务仅供文化体验与娱乐参考,不构成任何专业建议。</p>
+</section>
+
+<section class="liupai-grid">
+  {% for p in liupai_list %}
+  <a class="liupai-card" href="/liupai/{{ p.id }}">
+    <div class="liupai-icon">{{ p.icon }}</div>
+    <div class="liupai-info">
+      <h3 class="liupai-name">{{ p.name }}</h3>
+      <p class="liupai-sub">{{ p.sub }}</p>
+    </div>
+    <div class="liupai-arrow">→</div>
+  </a>
+  {% endfor %}
+</section>
+
+<section class="cta-section">
+  <p class="cta-tip">选一个派别,输入你的生辰或问题,看看传统算法怎么说。</p>
+</section>
+{% endblock %}

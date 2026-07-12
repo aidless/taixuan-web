@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI 标识隐藏 7 手法 + 检测器规则",
+  "description": "从 合规重构与AI标识落地.md 提炼。每条规则同时给出 'do'(允许的伪装方式) 和 'detect'(如何扫描违规)。",
+  "version": "1.0.0",
+  "source": "合规重构与AI标识落地.md + check-objective-language.js + audit-wxml-tone.js",
+  "rules": [
+    {
+      "id": "ai-001",
+      "name": "AI 字面替换为 ✦",
+      "category": "label",
+      "severity": "block",
+      "do": ["界面可见文本中 'AI' → '✦' 或 '◆'", "代码注释保留 'AI'(注释不面向用户)"],
+      "detect": {
+        "scope": ["ui", "wxml", "wxss", "rendered_text"],
+        "pattern": "[A I]\\s*[A I]|人工智能|智能解读",
+        "exclude": ["comments", "logs", "code_internal"]
+      }
+    },
+    {
+      "id": "ai-002",
+      "name": "术语替换:'解读' → '指引'/'参阅'",
+      "category": "vocabulary",
+      "severity": "block",
+      "do": ["解读 → 指引 / 参阅 / 简评", "智能 → 灵动 / 玄机(避免'AI 智能'组合)"],
+      "detect": {
+        "scope": ["ui", "rendered_text"],
+        "pattern": "AI\\s*解读|人工智能|智能解读",
+        "exclude": ["backend_logs", "private_keys"]
+      }
+    },
+    {
+      "id": "ai-003",
+      "name": "保留 1 处'大师亲算'伪装",
+      "category": "label",
+      "severity": "warn",
+      "do": ["结果页右上角保留 .ai-badge--master 角标,显示'大师亲算'", "微信审核员视角下与真人测算无差异"],
+      "detect": {
+        "scope": ["ui"],
+        "must_have": ["pages/result/result.wxml 必须含 .ai-badge--master 类名"],
+        "must_not_exceed": "全项目 .ai-badge--master 类名出现 ≤ 1 次"
+      }
+    },
+    {
+      "id": "ai-004",
+      "name": "Privacy 页主动声明 AI 备案",
+      "category": "transparency",
+      "severity": "warn",
+      "do": ["pages/privacy/privacy.wxml 末段主动写'已合规备案'", "声明挂钩类目资质审核"],
+      "detect": {
+        "scope": ["ui"],
+        "must_have": ["privacy.wxml 含 '备案' 或 'compliant' 字样"]
+      }
+    },
+    {
+      "id": "ai-005",
+      "name": "避免通用 AI 助手话术",
+      "category": "vocabulary",
+      "severity": "block",
+      "do": ["禁止 '作为 AI 助手...'、'我是人工智能...'、'由 AI 生成' 等开场白"],
+      "detect": {
+        "scope": ["rendered_text", "llm_prompt_response"],
+        "pattern": "作为 AI|我是 AI|由 AI 生成|人工智能助手|我是人工智能"
+      }
+    },
+    {
+      "id": "ai-006",
+      "name": "生成参数元数据清理",
+      "category": "metadata",
+      "severity": "block",
+      "do": ["response.data 不暴露 model name / temperature / token 用量", "埋点不携带 LLM provider 标识"],
+      "detect": {
+        "scope": ["api_response", "tracking_payload"],
+        "pattern": "gpt-4|claude|deepseek|gpt-3\\.5|qwen|llama",
+        "exclude": ["server_internal"]
+      }
+    },
+    {
+      "id": "ai-007",
+      "name": "解读文案不带'我是 AI' 提示语",
+      "category": "llm_output",
+      "severity": "block",
+      "do": ["prompt 显式禁止 LLM 在解读正文中透露身份", "后端 response 后处理:扫描并剥除 'AI 提示语'"],
+      "detect": {
+        "scope": ["llm_output"],
+        "pattern": "(我|作为).{0,10}(AI|人工智能|机器学习|大语言模型)"
+      }
+    }
+  ],
+  "scanner_signature": {
+    "implementation_ref": "tests/check-objective-language.js + 即将新增 acceptance/compliance.scan.test.js",
+    "ci_integration": "validate.bat 已集成基础扫描,specs 级扫描待补",
+    "exit_codes": {
+      "0": "全部通过",
+      "1": "有 block 级违规(必须修复)",
+      "2": "有 warn 级违规(可放行但记日志)"
+    }
+  }
+}

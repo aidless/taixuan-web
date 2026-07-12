@@ -1,0 +1,84 @@
+# 八字 LLM Prompt 契约
+# Source: knowledge/20-v2-prompts/bazi.md (95 行)
+# 对应输出 schema: ../schools/bazi.result.schema.json
+liupai: bazi
+version: '1.0.0'
+output_schema_ref: ../schools/bazi.result.schema.json
+
+role: |
+  你是一位资深传统文化知识助手,基于八字排盘算法为用户呈现传统文化背景知识。
+  你的呈现风格基于历史事实 + 文化共识,不预测命运、不恐吓用户、多用客观信息。
+
+context:
+  - { key: gender,    label: 用户性别, type: string,  example: 'male' }
+  - { key: question,  label: 用户问题, type: string,  example: '今年适合跳槽吗' }
+  - { key: tst,       label: 真太阳时(经度+EoT 校正), type: object }
+  - { key: city,      label: 出生地, type: string,  optional: true }
+
+pan_input:
+  template: |
+    # 八字排盘
+    - 年柱：{fourPillars.year}(立春换年——v1.9.4 修后用 getYearInGanZhiByLiChun)
+    - 月柱：{fourPillars.month}(节气换月——不是公历 1 号)
+    - 日柱：{fourPillars.day}(日主 = {fourPillars.day[0]})
+    - 时柱：{fourPillars.hour}(真太阳时算时柱)
+    - 生肖：{fourPillars.zodiac}
+    - 完整八字：{fourPillars.eightChar}(年 月 日 时 空格分隔)
+
+    # 排盘要素(可选,如有)
+    - 纳音：年柱 {fourPillars.yearNaYin}
+    - 藏干：日柱 {fourPillars.dayHideGan}
+    - 十神：年柱 {tenGods.year}, 月柱 {tenGods.month}, 时柱 {tenGods.hour}
+
+    # 节气
+    - 当前节气：{currentTerm}
+  variables:
+    - { key: fourPillars.year,    type: string,  example: '壬午' }
+    - { key: fourPillars.month,   type: string,  example: '壬子' }
+    - { key: fourPillars.day,     type: string,  example: '乙亥' }
+    - { key: fourPillars.hour,    type: string,  example: '丙子' }
+    - { key: fourPillars.zodiac,  type: string,  example: '马' }
+    - { key: fourPillars.eightChar, type: string, example: '壬午 壬子 乙亥 丙子' }
+    - { key: fourPillars.yearNaYin, type: string, optional: true }
+    - { key: fourPillars.dayHideGan, type: string, optional: true }
+    - { key: tenGods.year,  type: string, optional: true }
+    - { key: tenGods.month, type: string, optional: true }
+    - { key: tenGods.hour,  type: string, optional: true }
+    - { key: currentTerm,   type: string, example: '立秋' }
+
+style:
+  max_words: 800
+  tone: warm
+  banned_phrases_ref: ../../specs/compliance/mingli_banned_words.json
+  requirements:
+    - 长度 500 字以内(demo 是 200 字,v2.0 LLM 可略长但别超 800)
+    - 避免绝对断言(必定/一定/100%/大凶 等)
+    - 避免恐吓用语(破财/血光/绝症/死亡 等)
+    - 用概率性语言(通常/可能/倾向/建议/在某些情况下)
+    - 多具体场景(工作/感情/决策/家人,不要泛泛而谈)
+    - 基于真太阳时:如果 tst 偏移大(> 60min),需考虑时辰变化的影响
+
+output_format:
+  - { id: total_lun,   title: '命格总论',   min_words: 80,  max_words: 120 }
+  - { id: question,    title: '所问分析',   min_words: 100, max_words: 150 }
+  - { id: season,      title: '时令建议',   min_words: 60,  max_words: 100 }
+  - { id: quote,       title: '金句与方位', min_words: 60,  max_words: 100 }
+  - { id: term_bless,  title: '节气寄语',   min_words: 80,  max_words: 120 }
+
+disclaimer:
+  required: true
+  template_ref: ../../specs/compliance/disclaimer_templates.json#/templates/schools/bazi
+  fallback: '本解读由 AI 模型基于传统命理算法生成,仅供文化体验与娱乐参考,不构成任何专业建议。'
+
+tuning:
+  temperature: 0.7
+  max_tokens: 1500
+  top_p: 0.9
+  few_shot_count: 1
+  rag: false
+  system_role_separate: true
+
+notes: |
+  - 立春换年必须用 getYearInGanZhiByLiChun(避免公历年跨立春的 bug)
+  - 真太阳时偏移 > 60min 时,可能改时辰柱,需在 prompt 中显式标注
+  - few-shot 示例:可用 utils/liupai-reader.js 的 demo 输出

@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "taixuan://specs/schools/bazi.result.schema.json",
+  "title": "八字解读结果契约",
+  "description": "8 派结果 schema 之一。约定后端 LLM 输出 / 前端渲染的最小可解析结构。所有八字解读必须满足此 schema。",
+  "version": "1.0.0",
+  "source": "knowledge/20-v2-prompts/bazi.md + tests/liupai-reader-test.js + utils/liupai-reader.js",
+  "type": "object",
+  "required": ["summary", "sections", "disclaimer", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0",
+      "description": "用于 v3.0 LLM 微调按版本分组"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 200,
+      "description": "一段话总览(<200 字),用于结果页顶部"
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "description": "结构化段落,前端 liupai-reader.js 会按此渲染",
+      "items": {
+        "type": "object",
+        "required": ["title", "content", "tone"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 30,
+            "description": "段落标题,如 '事业展望'、'健康提醒'"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 30,
+            "maxLength": 500,
+            "description": "段落正文"
+          },
+          "tone": {
+            "enum": ["neutral", "warm", "cautious"],
+            "description": "语气:neutral=中性, warm=温暖鼓励, cautious=谨慎提醒"
+          },
+          "keyPoints": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {"type": "string", "maxLength": 50},
+            "description": "段落要点,前端可作 bullet 渲染"
+          }
+        }
+      }
+    },
+    "fiveElements": {
+      "type": "object",
+      "description": "五行分布(可选,但建议填,前端有可视化)",
+      "properties": {
+        "metal": {"type": "integer", "minimum": 0},
+        "wood": {"type": "integer", "minimum": 0},
+        "water": {"type": "integer", "minimum": 0},
+        "fire": {"type": "integer", "minimum": 0},
+        "earth": {"type": "integer", "minimum": 0}
+      }
+    },
+    "dayMaster": {
+      "type": "string",
+      "description": "日主天干,如 '戊'"
+    },
+    "lucky": {
+      "type": "object",
+      "description": "建议性幸运值(非预测)",
+      "properties": {
+        "color": {"type": "string"},
+        "number": {"type": "integer", "minimum": 1, "maximum": 99},
+        "direction": {"type": "string"}
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {"type": "string", "maxLength": 80},
+      "description": "提醒事项,如 '近期注意休息'(建议性,非预测)"
+    },
+    "disclaimer": {
+      "type": "string",
+      "minLength": 20,
+      "description": "免责说明(合规要求,见 compliance/disclaimer_templates.json)"
+    }
+  },
+  "compliance_constraints": {
+    "no_absolute_predictions": "禁用 '必定'、'一定'、'100%'、'必然' 等绝对预测词",
+    "no_fatalism": "禁用 '大凶'、'必死'、'无解' 等宿命论表述",
+    "no_redirection_words": "禁用 '算命'、'占卜'、'预测命运'、'改运'、'法事' 等微信红线词(完整清单见 compliance/mingli_banned_words.json)",
+    "must_have_disclaimer": "disclaimer 字段不可为空,且必须引用 templates.bazi 中的至少 1 句"
+  }
+}

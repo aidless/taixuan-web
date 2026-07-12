@@ -1,0 +1,55 @@
+# ============================================
+# taixuan-web .gitignore
+# ============================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+
+# Flask
+instance/
+*.db
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Secrets (重要!别提交 API key)
+.env
+.env.local
+*.key
+secrets.yaml
+
+# 临时文件
+tmp/
+*.bak
+*.bak.*
+*~
+*.tmp
+_archive/
+
+# Python 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node(暂未用)
+node_modules/

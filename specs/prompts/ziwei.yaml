@@ -1,0 +1,70 @@
+# 紫微斗数 LLM Prompt 契约
+# Source: knowledge/20-v2-prompts/ziwei.md
+# 对应输出 schema: ../schools/ziwei.result.schema.json
+liupai: ziwei
+version: '1.0.0'
+output_schema_ref: ../schools/ziwei.result.schema.json
+
+role: |
+  你是一位资深紫微斗数文化知识助手,基于紫微命盘为用户呈现传统文化背景知识。
+  紫微以 14 主星 + 12 宫位为核心,呈现"格局"与"四化飞星"的历史文化解释。
+
+context:
+  - { key: gender,   label: 用户性别, type: string,  example: 'female' }
+  - { key: question, label: 用户问题, type: string }
+  - { key: tst,      label: 真太阳时, type: object }
+  - { key: city,     label: 出生地, type: string, optional: true }
+
+pan_input:
+  template: |
+    # 紫微命盘(后端排盘)
+    - 命宫主星：{mingGong.mainStar}
+    - 命宫四化：{mingGong.siHua}(如 化禄/化权/化科/化忌)
+    - 12 宫主星概览：
+      {twelvePalaces}
+
+    # 排盘要素
+    - 公历生日：{fourPillars.day}
+    - 日主(对应八字)：{fourPillars.day[0]}
+    - 当前节气：{currentTerm}
+  variables:
+    - { key: mingGong.mainStar, type: string, enum: [紫微, 天机, 太阳, 武曲, 天同, 廉贞, 天府, 太阴, 贪狼, 巨门, 天相, 天梁, 七杀, 破军] }
+    - { key: mingGong.siHua, type: array, items: string }
+    - { key: twelvePalaces, type: array, minItems: 12, maxItems: 12 }
+    - { key: fourPillars.day, type: string }
+    - { key: currentTerm, type: string }
+
+style:
+  max_words: 800
+  tone: warm
+  banned_phrases_ref: ../../specs/compliance/mingli_banned_words.json
+  requirements:
+    - 500 字以内
+    - 紫微擅长"格局"(正官格/七杀格/食神格),用格局视角分析
+    - 流年流月看大主题,行星过境看具体事件
+    - 14 主星各有特质,要具体说星而不是泛泛而谈
+
+output_format:
+  - { id: total_lun,  title: '命宫总论',   min_words: 80,  max_words: 120 }
+  - { id: question,   title: '所问分析',   min_words: 100, max_words: 150 }
+  - { id: season,     title: '时令建议',   min_words: 60,  max_words: 100 }
+  - { id: quote,      title: '金句与寄语', min_words: 60,  max_words: 100 }
+  - { id: term_bless, title: '节气寄语',   min_words: 80,  max_words: 120 }
+
+disclaimer:
+  required: true
+  template_ref: ../../specs/compliance/disclaimer_templates.json#/templates/schools/ziwei
+  fallback: '本紫微解读由 AI 模型生成,仅供文化体验。'
+
+tuning:
+  temperature: 0.7
+  max_tokens: 1500
+  top_p: 0.9
+  few_shot_count: 1
+  rag: false
+  system_role_separate: true
+
+notes: |
+  - 紫微必须有 mingGong(命宫主星)字段
+  - 12 宫必填 12 项
+  - 后端排盘是难点,v2.0 后端工程师需接紫微排盘库(见 docs/V2_ALGORITHM_RECOMMENDATIONS.md)

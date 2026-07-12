@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>{% block title %}泰玄小站 · 传统文化工具箱{% endblock %}</title>
+  <meta name="description" content="{% block description %}基于传统算法的文化参考与娱乐。八字、紫微、奇门、六爻、梅花、塔罗、西占、吠陀八派合参,LLM 解读。{% endblock %}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">✦</span>
+      <span class="brand-name">泰玄小站</span>
+    </a>
+    <div class="nav-links">
+      <a href="/">首页</a>
+      <a href="/privacy">隐私</a>
+      <a href="/terms">条款</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>本服务仅供文化参考与娱乐,不构成任何专业建议。</p>
+    <p class="footer-meta">
+      <a href="/privacy">隐私政策</a> ·
+      <a href="/terms">服务条款</a> ·
+      备案中 · 域名 wanxiangapp.xyz
+    </p>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

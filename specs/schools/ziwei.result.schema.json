@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "taixuan://specs/schools/ziwei.result.schema.json",
+  "title": "紫微斗数解读结果契约",
+  "description": "8 派结果 schema 之一。紫微以 14 主星 + 12 宫位为核心,本结果契约保留主星 + 宫位列表。",
+  "version": "1.0.0",
+  "source": "knowledge/20-v2-prompts/ziwei.md + knowledge/02-ziwei.md + utils/liupai-reader.js",
+  "type": "object",
+  "required": ["summary", "sections", "disclaimer", "schema_version", "mingGong"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 200
+    },
+    "mingGong": {
+      "type": "object",
+      "description": "命宫主星(紫微核心)",
+      "required": ["mainStar"],
+      "properties": {
+        "mainStar": {"enum": ["紫微", "天机", "太阳", "武曲", "天同", "廉贞", "天府", "太阴", "贪狼", "巨门", "天相", "天梁", "七杀", "破军"]},
+        "secondaryStars": {"type": "array", "items": {"type": "string"}},
+        "siHua": {"type": "array", "items": {"enum": ["化禄", "化权", "化科", "化忌"]}, "description": "四化飞星"}
+      }
+    },
+    "twelvePalaces": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "description": "12 宫主星概览",
+      "items": {
+        "type": "object",
+        "required": ["palace", "mainStars"],
+        "properties": {
+          "palace": {"enum": ["命宫", "兄弟", "夫妻", "子女", "财帛", "疾厄", "迁移", "交友", "官禄", "田宅", "福德", "父母"]},
+          "mainStars": {"type": "array", "items": {"type": "string"}},
+          "comment": {"type": "string", "maxLength": 200, "description": "此宫关键提示"}
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["title", "content", "tone"],
+        "properties": {
+          "title": {"type": "string", "maxLength": 30},
+          "content": {"type": "string", "minLength": 30, "maxLength": 500},
+          "tone": {"enum": ["neutral", "warm", "cautious"]},
+          "keyPoints": {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 50}}
+        }
+      }
+    },
+    "dayMaster": {"type": "string", "description": "日主天干"},
+    "disclaimer": {"type": "string", "minLength": 20}
+  },
+  "compliance_constraints": {
+    "no_absolute_predictions": "禁用 必定 / 一定 / 100% / 必然",
+    "no_fatalism": "禁用 大凶 / 必死 / 无解",
+    "no_redirection_words": "禁用 算命 / 占卜 / 预测命运 / 改运",
+    "must_have_disclaimer": "disclaimer 不可为空,引用 templates.ziwei"
+  }
+}

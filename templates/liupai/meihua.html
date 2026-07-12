@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{{ liupai_name }} · 泰玄小站{% endblock %}
+
+{% block content %}
+<section class="form-page">
+  <a class="back-link" href="/">← 返回首页</a>
+  <h1 class="page-title">{{ liupai_name }}推演</h1>
+  <p class="page-sub">输入生辰信息,基于传统排盘算法为你呈现文化参考。</p>
+
+  <form id="reading-form" class="reading-form">
+    <div class="form-grid">
+            <div class="form-field form-field-wide">
+        <label for="qiGuaMethod">起卦方式 (时间/数字/声音)</label>
+        <input type="text" id="qiGuaMethod" name="qiGuaMethod" placeholder="">
+      </div>
+      <div class="form-field form-field-wide">
+        <label for="numbers">数字 (用,分隔)</label>
+        <input type="text" id="numbers" name="numbers" placeholder="">
+      </div>
+      <div class="form-field form-field-wide">
+        <label for="question">想问的问题</label>
+        <input type="text" id="question" name="question" placeholder="">
+      </div>
+
+      <div class="form-field form-field-wide">
+        <label for="question">你的问题(选填,但建议填)</label>
+        <textarea id="question" name="question" rows="3" placeholder="例:今年事业运势如何?什么时候适合换工作?"></textarea>
+      </div>
+
+      <div class="form-field form-field-wide">
+        <label for="birth_date">出生日期(年-月-日)</label>
+        <input type="text" id="birth_date" name="birth_date" placeholder="例:1990-05-15">
+      </div>
+
+      <div class="form-field form-field-wide">
+        <label for="birth_time">出生时间(时:分,24h)</label>
+        <input type="text" id="birth_time" name="birth_time" placeholder="例:14:30">
+      </div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submit-btn">开始推演</button>
+  </form>
+
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <p>正在为你推演 · 通常 5-15 秒</p>
+  </div>
+
+  <div id="result" class="result hidden">
+    <h2 class="result-title">解读结果</h2>
+    <div id="result-meta" class="result-meta"></div>
+    <div id="result-text" class="result-text"></div>
+    <div id="result-disclaimer" class="result-disclaimer"></div>
+    <button class="retry-btn" onclick="location.reload()">再问一次</button>
+  </div>
+
+  <div id="error-box" class="error-box hidden">
+    <p id="error-msg"></p>
+    <button class="retry-btn" onclick="location.reload()">重试</button>
+  </div>
+</section>
+
+<script>
+document.getElementById('reading-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const form = e.target;
+  const submitBtn = document.getElementById('submit-btn');
+  const loading = document.getElementById('loading');
+  const result = document.getElementById('result');
+  const errorBox = document.getElementById('error-box');
+
+  // 重置状态
+  result.classList.add('hidden');
+  errorBox.classList.add('hidden');
+
+  // 收集表单
+  const formData = {};
+  for (const el of form.elements) {
+    if (el.name && el.value.trim()) formData[el.name] = el.value.trim();
+  }
+
+  if (!formData.question && !formData.birth_date) {
+    document.getElementById('error-msg').textContent = '请至少填写"问题"或"出生日期"中的一项。';
+    errorBox.classList.remove('hidden');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = '推演中...';
+  loading.classList.remove('hidden');
+
+  try {
+    const resp = await fetch('/api/v2/liupai/{{ liupai }}/reading', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    loading.classList.add('hidden');
+    submitBtn.disabled = false;
+    submitBtn.textContent = '开始推演';
+
+    document.getElementById('result-meta').textContent =
+      `派别:${ '{{ liupai_name }}' } · 后端:${ data.backend } · 耗时:${ data.latency_sec.toFixed(1) }s` +
+      (data.fallback_used ? ' · 已降级' : '');
+    document.getElementById('result-text').textContent = data.text;
+    document.getElementById('result-disclaimer').textContent = data.disclaimer || '';
+    result.classList.remove('hidden');
+    result.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    loading.classList.add('hidden');
+    submitBtn.disabled = false;
+    submitBtn.textContent = '开始推演';
+    document.getElementById('error-msg').textContent = '出错了:' + err.message + '。请稍后重试。';
+    errorBox.classList.remove('hidden');
+    errorBox.scrollIntoView({ behavior: 'smooth' });
+  }
+});
+</script>
+{% endblock %}
