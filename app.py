@@ -25,6 +25,7 @@ import json
 import yaml
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, abort, Response, stream_with_context
@@ -60,18 +61,213 @@ except Exception:
 # ============================================================
 # Flask app
 # ============================================================
+# Flask 应用配置
 app = Flask(__name__, template_folder=str(BASE_DIR / "templates"), static_folder=str(BASE_DIR / "static"))
+# 生产模式不重载模板(性能 +10%)
+app.config["TEMPLATES_AUTO_RELOAD"] = os.environ.get("FLASK_DEBUG", "0") == "1"
+# JSON 不排序(更快)
+app.config["JSON_SORT_KEYS"] = False
+# 上传大小限制(防滥用)
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64KB
+
+# ============================================================
+# 安全 headers + gzip 压缩 + 静态资源缓存
+# ============================================================
+
+@app.after_request
+def add_security_headers(response):
+    """每个响应加 CSP / HSTS / X-Frame 等安全 headers"""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # CSP(内容安全策略):防 XSS / 数据外泄
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "  # 'unsafe-inline' 用于内联 JS,生产可去
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'"
+    )
+    # 静态资源缓存 1 小时
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=3600"
+    # API 不缓存
+    elif request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+import gzip
+import io
+import threading
+import time as time_module
+import sqlite3
+from collections import defaultdict
+
+# 限流:每 IP 每分钟 N 次,超过返回 429
+# 内存字典实现(单进程够用,gunicorn 多 worker 时用 redis)
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_MIN", "10"))  # 默认每分钟 10 次
+RATE_WINDOW = 60  # 秒
+_rate_lock = threading.Lock()
+_rate_buckets = defaultdict(list)  # ip -> [timestamp1, timestamp2, ...]
+
+
+def check_rate_limit(ip: str) -> bool:
+    """检查 IP 是否超限。超限返回 False"""
+    with _rate_lock:
+        now = time_module.time()
+        # 清理窗口外的记录
+        _rate_buckets[ip] = [t for t in _rate_buckets[ip] if now - t < RATE_WINDOW]
+        if len(_rate_buckets[ip]) >= RATE_LIMIT:
+            return False
+        _rate_buckets[ip].append(now)
+        return True
+
+
+# ============================================================
+# 历史记录(SQLite 轻量级存储,不引入 SQLAlchemy)
+# ============================================================
+
+DB_PATH = LOG_DIR / "readings.db"
+_db_lock = threading.Lock()
+
+
+def get_db():
+    """获取 SQLite 连接(每次调用都用新连接,threading 友好)"""
+    conn = sqlite3.connect(str(DB_PATH), timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    """初始化 readings 表(应用启动时调用)"""
+    with _db_lock:
+        conn = get_db()
+        try:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS readings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    liupai TEXT NOT NULL,
+                    client_ip TEXT,
+                    question TEXT,
+                    form_json TEXT,
+                    response_text TEXT,
+                    reasoning_text TEXT,
+                    backend TEXT,
+                    latency_sec REAL,
+                    chunk_count INTEGER,
+                    status TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_readings_created_at
+                    ON readings(created_at);
+                CREATE INDEX IF NOT EXISTS idx_readings_liupai
+                    ON readings(liupai);
+            """)
+            conn.commit()
+            log.info(f"SQLite DB initialized at {DB_PATH}")
+        finally:
+            conn.close()
+
+
+def save_reading(liupai: str, client_ip: str, form_data: dict,
+                 response_text: str = "", reasoning_text: str = "",
+                 backend: str = "", latency_sec: float = 0.0,
+                 chunk_count: int = 0, status: str = "ok"):
+    """保存一条解读记录到 SQLite。失败不抛异常(写入失败不影响主流程)"""
+    try:
+        with _db_lock:
+            conn = get_db()
+            try:
+                conn.execute(
+                    """INSERT INTO readings
+                    (liupai, client_ip, question, form_json, response_text,
+                     reasoning_text, backend, latency_sec, chunk_count, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        liupai, client_ip,
+                        form_data.get("question", "")[:500],  # 截断长问题
+                        json.dumps(form_data, ensure_ascii=False)[:5000],
+                        response_text[:50000],
+                        reasoning_text[:30000],
+                        backend,
+                        latency_sec,
+                        chunk_count,
+                        status,
+                    ),
+                )
+                conn.commit()
+                llm_audit.info(
+                    f"reading saved: liupai={liupai} backend={backend} "
+                    f"latency={latency_sec:.1f}s chunks={chunk_count} "
+                    f"chars={len(response_text)} ip={client_ip}"
+                )
+            finally:
+                conn.close()
+    except Exception as e:
+        log.exception(f"failed to save reading: {e}")
+
+
+@app.after_request
+def gzip_response(response):
+    """gzip 压缩文本响应(>1KB 才有意义)"""
+    # SSE 流式不压缩(实时性重要)
+    if response.mimetype == "text/event-stream":
+        return response
+    # 不压缩已压缩内容
+    if "gzip" in (response.headers.get("Content-Encoding") or ""):
+        return response
+    # 只压缩文本
+    if not response.mimetype.startswith(("text/", "application/json", "application/javascript")):
+        return response
+    # 客户端支持 gzip?
+    if "gzip" not in (request.headers.get("Accept-Encoding") or ""):
+        return response
+    # 数据太小不压缩
+    response.direct_passthrough = False
+    data = response.get_data()
+    if len(data) < 1024:
+        return response
+    # gzip 压缩
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as f:
+        f.write(data)
+    response.set_data(buf.getvalue())
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(len(response.get_data()))
+    return response
 
 # 日志
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler(LOG_DIR / "taixuan-web.log", encoding="utf-8"),
+        # 日志轮转:单个文件最大 10MB,保留 5 个备份
+        RotatingFileHandler(
+            LOG_DIR / "taixuan-web.log",
+            encoding="utf-8",
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+        ),
+        # LLM 调用审计日志(单独,不轮转太频繁)
+        RotatingFileHandler(
+            LOG_DIR / "llm-audit.log",
+            encoding="utf-8",
+            maxBytes=50 * 1024 * 1024,  # 50MB
+            backupCount=3,
+        ),
         logging.StreamHandler(),
     ],
 )
 log = logging.getLogger("taixuan-web")
+llm_audit = logging.getLogger("taixuan-llm-audit")
+
+# 启动时初始化 DB(log 定义之后才能调)
+init_db()
 
 # ============================================================
 # 8 派配置
@@ -163,6 +359,12 @@ def index():
 def liupai_form(name):
     if name not in LIUPAI_IDS:
         abort(404)
+
+    # 限流(防止恶意爬所有 8 派页面,虽然 yaml 是缓存的)
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    if not check_rate_limit(client_ip):
+        return ("太多请求,稍后再试", 429)
+
     cfg = load_prompt(name)
     # 提取表单字段(从 context 段)
     fields = cfg.get("context", []) if cfg else []
@@ -184,6 +386,14 @@ def api_reading(name):
     if name not in LIUPAI_IDS:
         return jsonify({"error": "unknown_liupai", "liupai": name}), 404
 
+    # 0. 限流
+    client_ip = _get_client_ip()
+    if not check_rate_limit(client_ip):
+        return jsonify({
+            "error": "rate_limited",
+            "detail": f"每分钟最多 {RATE_LIMIT} 次解读,请稍后再试",
+        }), 429
+
     # 1. 取表单数据
     if request.is_json:
         form_data = request.get_json(silent=True) or {}
@@ -194,6 +404,13 @@ def api_reading(name):
         return jsonify({"error": "question_required"}), 400
 
     log.info(f"reading request: liupai={name}, keys={list(form_data.keys())}")
+
+    # 1.5 输入校验
+    err_resp, err_status = _validate_question(
+        form_data.get("question", ""), client_ip, "reading"
+    )
+    if err_resp:
+        return err_resp, err_status
 
     # 2. 构造 messages
     messages = build_messages(name, form_data)
@@ -211,11 +428,20 @@ def api_reading(name):
 
     # 4. fallback 文案兜底
     cfg = load_prompt(name)
-    fallback_text = ""
-    if cfg and "disclaimer" in cfg:
-        fallback_text = cfg["disclaimer"].get("fallback", "")
+    fallback_text = cfg.get("disclaimer", {}).get("fallback", "") if cfg else ""
 
     text = result.get("text", "") or fallback_text
+
+    # 保存到历史记录(SQLite)
+    save_reading(
+        liupai=name,
+        client_ip=client_ip,
+        form_data=form_data,
+        response_text=text,
+        backend=result.get("backend", "unknown"),
+        latency_sec=elapsed,
+        status="ok" if text else "empty",
+    )
 
     return jsonify({
         "liupai": name,
@@ -242,17 +468,35 @@ def reading_stream(name):
     if name not in LIUPAI_IDS:
         return jsonify({"error": "unknown_liupai", "liupai": name}), 400
 
+    # 0. 限流(防 LLM 滥用)
+    client_ip = _get_client_ip()
+    if not check_rate_limit(client_ip):
+        return jsonify({
+            "error": "rate_limited",
+            "detail": f"每分钟最多 {RATE_LIMIT} 次解读,请稍后再试",
+        }), 429
+
     form_data = request.get_json(force=True, silent=True) or {}
 
-    # 组装 messages(函数自己加载 cfg)
+    # 0.5 输入校验
+    err_resp, err_status = _validate_question(
+        form_data.get("question", ""), client_ip, "stream"
+    )
+    if err_resp:
+        return err_resp, err_status
+
+    # 组装 messages
     try:
         messages = build_messages(name, form_data)
     except Exception as e:
         log.exception("build_messages failed")
         return jsonify({"error": "build_prompt_failed", "detail": str(e)}), 500
 
-    # 加载 prompt 配置(仅用于 disclaimer,可选)
     cfg = load_prompt(name) or {}
+    backend_used = _detect_backend_used()
+
+    # 状态变量(generator 闭包)
+    state = {"full_text": "", "reasoning_text": "", "chunk_count": 0}
 
     def generate():
         t0 = time.time()
@@ -260,25 +504,31 @@ def reading_stream(name):
         yield f"data: {json.dumps({'type': 'start', 'liupai': name, 'ts': t0}, ensure_ascii=False)}\n\n"
 
         # 2. 流式 LLM
-        full_text = ""
-        backend_used = "unknown"
-        fallback_used = False
         for chunk in router.chat_stream(messages, temperature=0.7, max_tokens=2500):
-            if chunk.startswith("[STREAM_ERROR"):
-                log.error(f"stream error: {chunk}")
-                yield f"data: {json.dumps({'type': 'error', 'message': chunk}, ensure_ascii=False)}\n\n"
-                break
-            full_text += chunk
-            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk}, ensure_ascii=False)}\n\n"
+            yield from _process_stream_chunk(chunk, state)
 
         elapsed = time.time() - t0
-        log.info(f"stream done: latency={elapsed:.1f}s, len={len(full_text)}")
+        log.info(f"stream done: latency={elapsed:.1f}s, content_len={len(state['full_text'])}, reasoning_len={len(state['reasoning_text'])}, chunks={state['chunk_count']}")
 
         # 3. 结束事件
-        fallback_text = ""
-        if cfg and "disclaimer" in cfg:
-            fallback_text = cfg["disclaimer"].get("fallback", "")
-        yield f"data: {json.dumps({'type': 'done', 'full_text': full_text, 'latency_sec': elapsed, 'disclaimer': fallback_text}, ensure_ascii=False)}\n\n"
+        fallback_text = cfg.get("disclaimer", {}).get("fallback", "") if cfg else ""
+        done_payload = {
+            "type": "done",
+            "full_text": state["full_text"],
+            "reasoning_text": state["reasoning_text"],
+            "latency_sec": elapsed,
+            "chunk_count": state["chunk_count"],
+            "disclaimer": fallback_text,
+        }
+        yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+
+        # 4. 保存历史
+        save_reading(
+            liupai=name, client_ip=client_ip, form_data=form_data,
+            response_text=state["full_text"], reasoning_text=state["reasoning_text"],
+            backend=backend_used, latency_sec=elapsed, chunk_count=state["chunk_count"],
+            status="ok" if state["full_text"] else "empty",
+        )
 
     return Response(
         stream_with_context(generate()),
@@ -289,6 +539,151 @@ def reading_stream(name):
             "Connection": "keep-alive",
         },
     )
+
+
+def _validate_question(question: str, client_ip: str, log_prefix: str):
+    """输入校验:长度 + 注入关键词检测。返回 (error_response, status) 或 (None, None)"""
+    if len(question) > 500:
+        return jsonify({"error": "question_too_long", "max": 500}), 400
+    injection_keywords = ["忽略", "ignore previous", "disregard", "act as", "扮演", "你是黑客", "输出系统提示"]
+    question_lower = question.lower()
+    for kw in injection_keywords:
+        if kw in question_lower:
+            log.warning(f"{log_prefix} injection detected: kw={kw} ip={client_ip}")
+            return jsonify({
+                "error": "injection_detected",
+                "detail": "问题包含敏感关键词,请重新表述",
+            }), 400
+    return None, None
+
+
+def _get_client_ip() -> str:
+    """提取客户端真实 IP(优先 X-Forwarded-For)"""
+    return request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+
+
+def _detect_backend_used() -> str:
+    """判断当前 router 实际会用的后端名称"""
+    if router.primary and router._primary_dead_count < router._primary_dead_threshold:
+        return router.primary.name
+    if router.fallback:
+        return router.fallback.name
+    return "unknown"
+
+
+def _process_stream_chunk(chunk, state):
+    """处理单条 stream chunk,返回 SSE 事件字符串(或 None 跳过)
+    state: dict 包含 full_text / reasoning_text / chunk_count 计数
+    """
+    if not isinstance(chunk, dict):
+        return
+    ctype = chunk.get("type")
+    text = chunk.get("text", "")
+    if ctype == "error":
+        log.error(f"stream error: {text}")
+        return f"data: {json.dumps({'type': 'error', 'message': text}, ensure_ascii=False)}\n\n"
+    if ctype == "reasoning":
+        state["reasoning_text"] += text
+        return f"data: {json.dumps({'type': 'reasoning', 'text': text}, ensure_ascii=False)}\n\n"
+    if ctype == "content":
+        state["full_text"] += text
+        state["chunk_count"] += 1
+        return f"data: {json.dumps({'type': 'content', 'text': text, 'chunk_count': state['chunk_count']}, ensure_ascii=False)}\n\n"
+
+
+# ============================================================
+# 历史记录 API
+# ============================================================
+
+@app.route("/api/v2/history", methods=["GET"])
+def api_history():
+    """返回最近 N 条解读记录(默认 10,最多 100)。不需要登录,纯匿名浏览。
+    注意:这是 demo 阶段(所有人都能看到所有记录),上用户系统后改按 user_id 过滤。
+    """
+    limit = min(int(request.args.get("limit", 10)), 100)
+    liupai_filter = request.args.get("liupai")
+    try:
+        conn = get_db()
+        try:
+            if liupai_filter:
+                rows = conn.execute(
+                    "SELECT id, liupai, question, backend, latency_sec, chunk_count, created_at "
+                    "FROM readings WHERE liupai = ? AND status = 'ok' "
+                    "ORDER BY id DESC LIMIT ?",
+                    (liupai_filter, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, liupai, question, backend, latency_sec, chunk_count, created_at "
+                    "FROM readings WHERE status = 'ok' "
+                    "ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            return jsonify({
+                "count": len(rows),
+                "items": [dict(r) for r in rows],
+            })
+        finally:
+            conn.close()
+    except Exception as e:
+        log.exception("history query failed")
+        return jsonify({"error": "history_query_failed", "detail": str(e)}), 500
+
+
+@app.route("/api/v2/history/<int:reading_id>", methods=["GET"])
+def api_history_detail(reading_id: int):
+    """返回某条解读的完整内容"""
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT * FROM readings WHERE id = ?", (reading_id,)
+            ).fetchone()
+            if not row:
+                return jsonify({"error": "not_found"}), 404
+            d = dict(row)
+            # 解析 form_json
+            try:
+                d["form"] = json.loads(d.pop("form_json"))
+            except (KeyError, json.JSONDecodeError):
+                d["form"] = {}
+            return jsonify(d)
+        finally:
+            conn.close()
+    except Exception as e:
+        log.exception("history detail query failed")
+        return jsonify({"error": "history_detail_failed", "detail": str(e)}), 500
+
+
+@app.route("/api/v2/stats", methods=["GET"])
+def api_stats():
+    """返回统计信息(总调用次数 / 按派别 / 按后端)"""
+    try:
+        conn = get_db()
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM readings WHERE status = 'ok'").fetchone()[0]
+            by_liupai = conn.execute(
+                "SELECT liupai, COUNT(*) AS count FROM readings WHERE status = 'ok' "
+                "GROUP BY liupai ORDER BY count DESC"
+            ).fetchall()
+            by_backend = conn.execute(
+                "SELECT backend, COUNT(*) AS count FROM readings WHERE status = 'ok' "
+                "GROUP BY backend ORDER BY count DESC"
+            ).fetchall()
+            avg_latency = conn.execute(
+                "SELECT AVG(latency_sec) FROM readings WHERE status = 'ok' AND latency_sec > 0"
+            ).fetchone()[0] or 0
+            return jsonify({
+                "total_readings": total,
+                "by_liupai": [dict(r) for r in by_liupai],
+                "by_backend": [dict(r) for r in by_backend],
+                "avg_latency_sec": round(avg_latency, 2),
+            })
+        finally:
+            conn.close()
+    except Exception as e:
+        log.exception("stats query failed")
+        return jsonify({"error": "stats_query_failed", "detail": str(e)}), 500
 
 
 @app.route("/privacy")
@@ -320,7 +715,9 @@ def healthz():
 def not_found(e):
     if request.path.startswith("/api/"):
         return jsonify({"error": "not_found"}), 404
-    return render_template("404.html"), 404 if (BASE_DIR / "templates" / "404.html").exists() else ("页面不存在", 404)
+    if (BASE_DIR / "templates" / "404.html").exists():
+        return render_template("404.html"), 404
+    return "页面不存在", 404
 
 
 @app.errorhandler(500)
