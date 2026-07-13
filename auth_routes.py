@@ -71,7 +71,6 @@ def logout(user):
     Header: Authorization: Bearer <token>
     Resp: 200 {ok: true}
     """
-    # Extract token from header (require_auth verified it's valid)
     auth = request.headers.get("Authorization", "")
     token = auth[7:].strip()
     user_system.revoke_session(token)
