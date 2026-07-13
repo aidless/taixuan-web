@@ -116,11 +116,29 @@ def validate_email(email: str) -> bool:
 
 
 def validate_password(password: str) -> tuple:
-    """Returns (ok, msg). Password must be >= 8 chars and include a digit."""
+    """Returns (ok, msg). Password must be >= 8 chars and meet complexity rules.
+
+    v2.0 Phase 5 upgrade: require at least 3 of 4 character classes
+    (uppercase / lowercase / digit / special). NIST-style guidance,
+    not arbitrary character class quotas.
+    """
     if not password or len(password) < 8:
         return False, "Password must be at least 8 characters"
-    if not any(c.isdigit() for c in password):
-        return False, "Password must contain at least one digit"
+    if len(password) > 128:
+        return False, "Password must be at most 128 characters"
+
+    classes = 0
+    if any(c.isupper() for c in password):
+        classes += 1
+    if any(c.islower() for c in password):
+        classes += 1
+    if any(c.isdigit() for c in password):
+        classes += 1
+    if any(not c.isalnum() for c in password):
+        classes += 1
+
+    if classes < 3:
+        return False, "Password must include at least 3 of: uppercase letter, lowercase letter, digit, special character"
     return True, ""
 
 
@@ -361,6 +379,80 @@ def remove_favorite(user_id: int, favorite_id: int) -> bool:
         )
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ===== Login lockout (Phase 5) =====
+
+# Lockout thresholds (configurable via env)
+LOCKOUT_WINDOW_SEC = int(os.environ.get("TAIXUAN_LOCKOUT_WINDOW_SEC", "900"))  # 15 min
+LOCKOUT_MAX_ATTEMPTS = int(os.environ.get("TAIXUAN_LOCKOUT_MAX_ATTEMPTS", "5"))
+
+
+def get_client_ip() -> str:
+    """Get client IP, respecting X-Forwarded-For (for nginx reverse proxy)."""
+    from flask import request
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        # Take the first (original client) IP
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "0.0.0.0"
+
+
+def record_login_attempt(client_ip: str, email: str = None, success: bool = False) -> None:
+    """Log a login attempt. Failures count toward lockout; successes do not."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "INSERT INTO login_attempts (client_ip, email, success) VALUES (?, ?, ?)",
+            (client_ip, email, 1 if success else 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def check_login_lockout(client_ip: str) -> tuple:
+    """Returns (locked, message). If locked, message contains remaining minutes."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt, MAX(attempted_at) AS last_attempt "
+            "FROM login_attempts "
+            "WHERE client_ip = ? AND success = 0 "
+            "  AND attempted_at > datetime('now', ?)",
+            (client_ip, f"-{LOCKOUT_WINDOW_SEC} seconds"),
+        ).fetchone()
+        if not row or row["cnt"] < LOCKOUT_MAX_ATTEMPTS:
+            return False, ""
+        # Calculate remaining lockout time
+        remaining = LOCKOUT_WINDOW_SEC
+        if row["last_attempt"]:
+            from datetime import datetime, timedelta
+            last = datetime.strptime(row["last_attempt"][:19], "%Y-%m-%d %H:%M:%S")
+            elapsed = (datetime.now() - last).total_seconds()
+            remaining = max(0, int(LOCKOUT_WINDOW_SEC - elapsed))
+        minutes = remaining // 60
+        seconds = remaining % 60
+        if minutes > 0:
+            msg = f"Too many failed login attempts. Try again in {minutes} minutes."
+        else:
+            msg = f"Too many failed login attempts. Try again in {seconds} seconds."
+        return True, msg
+    finally:
+        conn.close()
+
+
+def clear_login_attempts(client_ip: str) -> None:
+    """Clear failed attempts for an IP after successful login."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "DELETE FROM login_attempts WHERE client_ip = ? AND success = 0",
+            (client_ip,),
+        )
+        conn.commit()
     finally:
         conn.close()
 
