@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}订阅 · 泰玄小站{% endblock %}
+
+{% block content %}
+<div class="auth-container subscribe-container">
+    <h1>订阅 · 解锁更多解读</h1>
+    <p class="auth-subtitle">免费用户每天 5 次解读。订阅后无限制 + 历史无限保留 + 优先新派别。</p>
+
+    <div id="loading" class="auth-loading">加载中...</div>
+
+    <div id="plans" class="plan-grid" style="display:none"></div>
+
+    <div id="status" class="me-section" style="display:none">
+        <h2>当前订阅</h2>
+        <p>方案:<span id="statusPlan">-</span></p>
+        <p>状态:<span id="statusActive">-</span></p>
+        <p>到期:<span id="statusExpiry">-</span>(剩 <span id="statusDays">-</span> 天)</p>
+        <button id="cancelBtn" class="btn-secondary" style="display:none">取消订阅</button>
+    </div>
+
+    <div id="msgBox" class="auth-error" style="display:none"></div>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script>
+async function loadPlans() {
+    const resp = await fetch('/api/v2/subscribe/plans');
+    const data = await resp.json();
+    const grid = document.getElementById('plans');
+    grid.innerHTML = '';
+    data.plans.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'plan-card';
+        const priceDisplay = p.price_cents > 0 ? '¥' + (p.price_cents / 100).toFixed(2) : '免费';
+        card.innerHTML = `
+            <h3>${p.name}</h3>
+            <p class="plan-label">${p.label}</p>
+            <p class="plan-price">${priceDisplay}</p>
+            <button class="btn-primary plan-btn" data-plan="${p.name}">选择</button>
+        `;
+        grid.appendChild(card);
+    });
+    grid.querySelectorAll('.plan-btn').forEach(btn => {
+        btn.addEventListener('click', () => subscribe(btn.dataset.plan));
+    });
+    grid.style.display = 'grid';
+    document.getElementById('loading').style.display = 'none';
+
+    if (data.mode === 'mock') {
+        const note = document.createElement('p');
+        note.className = 'auth-subtitle';
+        note.innerHTML = '<small>(开发模式:点击订阅会直接激活,无真实支付)</small>';
+        grid.appendChild(note);
+    }
+}
+
+async function loadStatus() {
+    const token = TaixuanAuth.getToken();
+    if (!token) return;
+    try {
+        const resp = await fetch('/api/v2/subscribe/status', {
+            headers: { 'Authorization': 'Bearer ' + token },
+        });
+        if (!resp.ok) return;
+        const s = await resp.json();
+        document.getElementById('status').style.display = 'block';
+        document.getElementById('statusPlan').textContent = s.plan;
+        document.getElementById('statusActive').textContent = s.is_premium ? '高级' : '免费';
+        document.getElementById('statusExpiry').textContent = s.expires_at || '-';
+        document.getElementById('statusDays').textContent = s.days_remaining != null ? s.days_remaining : '-';
+        if (s.is_active && s.plan !== 'free') {
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+        }
+    } catch (e) { /* ignore */ }
+}
+
+async function subscribe(plan) {
+    const token = TaixuanAuth.getToken();
+    const msgBox = document.getElementById('msgBox');
+    msgBox.style.display = 'none';
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    try {
+        const resp = await fetch('/api/v2/subscribe/checkout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token,
+            },
+            body: JSON.stringify({ plan: plan }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            msgBox.textContent = data.error || '订阅失败';
+            msgBox.style.display = 'block';
+            return;
+        }
+        // Real Stripe: redirect to checkout URL
+        if (data.mode === 'stripe' && data.url) {
+            window.location.href = data.url;
+            return;
+        }
+        // Mock mode: redirect to mock_confirm URL
+        if (data.url) {
+            window.location.href = data.url;
+            return;
+        }
+        // Free plan: just reload
+        window.location.href = data.redirect_url || '/me';
+    } catch (err) {
+        msgBox.textContent = '网络错误: ' + err.message;
+        msgBox.style.display = 'block';
+    }
+}
+
+document.getElementById('cancelBtn').addEventListener('click', async () => {
+    if (!confirm('确认取消订阅?取消后保留当前有效期至到期日,但不再续费。')) return;
+    const token = TaixuanAuth.getToken();
+    try {
+        const resp = await fetch('/api/v2/subscribe/cancel', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            alert('订阅已取消');
+            window.location.reload();
+        } else {
+            alert(data.error || '取消失败');
+        }
+    } catch (e) {
+        alert('网络错误: ' + e.message);
+    }
+});
+
+loadPlans();
+loadStatus();
+</script>
+{% endblock %}
