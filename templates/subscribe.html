@@ -97,17 +97,35 @@ async function subscribe(plan) {
             msgBox.style.display = 'block';
             return;
         }
+        // Free plan: already deactivated, just redirect
+        if (data.mode === 'mock_free' || data.subscription) {
+            window.location.href = data.redirect_url || '/me';
+            return;
+        }
         // Real Stripe: redirect to checkout URL
         if (data.mode === 'stripe' && data.url) {
             window.location.href = data.url;
             return;
         }
-        // Mock mode: redirect to mock_confirm URL
-        if (data.url) {
-            window.location.href = data.url;
+        // Mock mode: call mock_confirm API directly with session_id + plan
+        if (data.mode === 'mock' && data.session_id) {
+            const confirmUrl = '/api/v2/subscribe/mock_confirm?session_id='
+                + encodeURIComponent(data.session_id)
+                + '&plan=' + encodeURIComponent(plan);
+            const confirmResp = await fetch(confirmUrl, {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+            const confirmData = await confirmResp.json();
+            if (!confirmResp.ok) {
+                msgBox.textContent = confirmData.error || 'Mock 确认失败';
+                msgBox.style.display = 'block';
+                return;
+            }
+            window.location.href = confirmData.redirect_url || '/me';
             return;
         }
-        // Free plan: just reload
+        // Fallback
         window.location.href = data.redirect_url || '/me';
     } catch (err) {
         msgBox.textContent = '网络错误: ' + err.message;
