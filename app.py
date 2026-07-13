@@ -35,6 +35,7 @@ import user_system  # noqa: E402
 from auth_routes import auth_bp  # noqa: E402
 from favorites_routes import favorites_bp  # noqa: E402
 from auth_helpers import get_optional_user  # noqa: E402
+from subscriptions_routes import subscriptions_bp  # noqa: E402
 import analytics  # noqa: E402  # v1.3 lightweight analytics
 
 # ============================================================
@@ -79,7 +80,8 @@ user_system.init_db()
 # Register auth (register/login/logout/me) + favorites blueprints
 app.register_blueprint(auth_bp, url_prefix="/api/v2/auth")
 app.register_blueprint(favorites_bp, url_prefix="/api/v2/favorites")
-logging.info("v2.0 user system registered (auth + favorites)")
+app.register_blueprint(subscriptions_bp, url_prefix="/api/v2/subscribe")
+logging.info("v2.0 user system registered (auth + favorites + subscriptions)")
 
 # ============================================================
 # v1.3 lightweight analytics bootstrap
@@ -799,6 +801,12 @@ def forgot_page():
 def reset_page():
     """v2.0 reset password page (Phase 6). Reads ?token=... from query."""
     return render_template("reset.html")
+
+
+@app.route("/subscribe")
+def subscribe_page():
+    """v2.0 subscribe page (Phase 7). Stripe checkout (or mock)."""
+    return render_template("subscribe.html")
 
 
 @app.route("/register")
