@@ -30,6 +30,15 @@ from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, abort, Response, stream_with_context
 
+# v2.0 user system (auth + favorites)
+import user_system  # noqa: E402
+from auth_routes import auth_bp  # noqa: E402
+from favorites_routes import favorites_bp  # noqa: E402
+from auth_helpers import get_optional_user  # noqa: E402
+
+# v1.3 lightweight analytics
+import analytics  # noqa: E402
+
 # ============================================================
 # 路径配置
 # ============================================================
@@ -63,6 +72,23 @@ except Exception:
 # ============================================================
 # Flask 应用配置
 app = Flask(__name__, template_folder=str(BASE_DIR / "templates"), static_folder=str(BASE_DIR / "static"))
+
+# ============================================================
+# v2.0 user system bootstrap
+# ============================================================
+# Initialize users/sessions/favorites/subscriptions tables
+user_system.init_db()
+# Register auth (register/login/logout/me) + favorites blueprints
+app.register_blueprint(auth_bp, url_prefix="/api/v2/auth")
+app.register_blueprint(favorites_bp, url_prefix="/api/v2/favorites")
+logging.info("v2.0 user system registered (auth + favorites)")
+
+# ============================================================
+# v1.3 lightweight analytics bootstrap
+# ============================================================
+analytics.init_analytics()
+analytics.install_middleware(app)
+logging.info("v1.3 analytics middleware installed")
 # 生产模式不重载模板(性能 +10%)
 app.config["TEMPLATES_AUTO_RELOAD"] = os.environ.get("FLASK_DEBUG", "0") == "1"
 # JSON 不排序(更快)
@@ -177,17 +203,22 @@ def init_db():
 def save_reading(liupai: str, client_ip: str, form_data: dict,
                  response_text: str = "", reasoning_text: str = "",
                  backend: str = "", latency_sec: float = 0.0,
-                 chunk_count: int = 0, status: str = "ok"):
-    """保存一条解读记录到 SQLite。失败不抛异常(写入失败不影响主流程)"""
+                 chunk_count: int = 0, status: str = "ok",
+                 user_id: int | None = None) -> int | None:
+    """保存一条解读记录到 SQLite。失败不抛异常(写入失败不影响主流程)
+    v2.0: 新增 user_id,None 表示匿名用户。
+    Returns: lastrowid (int) or None on failure.
+    """
     try:
         with _db_lock:
             conn = get_db()
             try:
-                conn.execute(
+                cur = conn.execute(
                     """INSERT INTO readings
                     (liupai, client_ip, question, form_json, response_text,
-                     reasoning_text, backend, latency_sec, chunk_count, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     reasoning_text, backend, latency_sec, chunk_count, status,
+                     user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         liupai, client_ip,
                         form_data.get("question", "")[:500],  # 截断长问题
@@ -198,18 +229,21 @@ def save_reading(liupai: str, client_ip: str, form_data: dict,
                         latency_sec,
                         chunk_count,
                         status,
+                        user_id,
                     ),
                 )
                 conn.commit()
                 llm_audit.info(
                     f"reading saved: liupai={liupai} backend={backend} "
                     f"latency={latency_sec:.1f}s chunks={chunk_count} "
-                    f"chars={len(response_text)} ip={client_ip}"
+                    f"chars={len(response_text)} ip={client_ip} user_id={user_id}"
                 )
+                return cur.lastrowid
             finally:
                 conn.close()
     except Exception as e:
         log.exception(f"failed to save reading: {e}")
+        return None
 
 
 @app.after_request
@@ -365,6 +399,15 @@ def liupai_form(name):
     if not check_rate_limit(client_ip):
         return ("太多请求,稍后再试", 429)
 
+    # v1.3 analytics: track liupai_view event
+    user = get_optional_user()
+    analytics.track_event(
+        name="liupai_view",
+        ip=client_ip,
+        user_id=user["user_id"] if user else None,
+        liupai=name,
+    )
+
     cfg = load_prompt(name)
     # 提取表单字段(从 context 段)
     fields = cfg.get("context", []) if cfg else []
@@ -403,6 +446,16 @@ def api_reading(name):
     if not form_data.get("question"):
         return jsonify({"error": "question_required"}), 400
 
+    # v1.3 analytics: track form_submit event
+    submitter = get_optional_user()
+    analytics.track_event(
+        name="form_submit",
+        ip=client_ip,
+        user_id=submitter["user_id"] if submitter else None,
+        liupai=name,
+        payload={"has_birth_date": bool(form_data.get("birth_date"))},
+    )
+
     log.info(f"reading request: liupai={name}, keys={list(form_data.keys())}")
 
     # 1.5 输入校验
@@ -433,7 +486,8 @@ def api_reading(name):
     text = result.get("text", "") or fallback_text
 
     # 保存到历史记录(SQLite)
-    save_reading(
+    user = get_optional_user()
+    reading_id = save_reading(
         liupai=name,
         client_ip=client_ip,
         form_data=form_data,
@@ -441,6 +495,7 @@ def api_reading(name):
         backend=result.get("backend", "unknown"),
         latency_sec=elapsed,
         status="ok" if text else "empty",
+        user_id=user["user_id"] if user else None,
     )
 
     return jsonify({
@@ -451,6 +506,8 @@ def api_reading(name):
         "latency_sec": elapsed,
         "disclaimer": fallback_text,
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        "user_id": user["user_id"] if user else None,
+        "reading_id": reading_id,
     })
 
 
@@ -510,7 +567,32 @@ def reading_stream(name):
         elapsed = time.time() - t0
         log.info(f"stream done: latency={elapsed:.1f}s, content_len={len(state['full_text'])}, reasoning_len={len(state['reasoning_text'])}, chunks={state['chunk_count']}")
 
-        # 3. 结束事件
+        # 4. 保存历史(先 save 拿到 reading_id 再 yield done)
+        user = get_optional_user()
+        reading_id = save_reading(
+            liupai=name, client_ip=client_ip, form_data=form_data,
+            response_text=state["full_text"], reasoning_text=state["reasoning_text"],
+            backend=backend_used, latency_sec=elapsed, chunk_count=state["chunk_count"],
+            status="ok" if state["full_text"] else "empty",
+            user_id=user["user_id"] if user else None,
+        )
+
+        # v1.3 analytics: track stream_complete event
+        analytics.track_event(
+            name="stream_complete",
+            ip=client_ip,
+            user_id=user["user_id"] if user else None,
+            liupai=name,
+            payload={
+                "reading_id": reading_id,
+                "latency_sec": round(elapsed, 2),
+                "chunk_count": state["chunk_count"],
+                "content_len": len(state["full_text"]),
+                "backend": backend_used,
+            },
+        )
+
+        # 3. 结束事件(带 reading_id,前端可用它收藏)
         fallback_text = cfg.get("disclaimer", {}).get("fallback", "") if cfg else ""
         done_payload = {
             "type": "done",
@@ -519,16 +601,10 @@ def reading_stream(name):
             "latency_sec": elapsed,
             "chunk_count": state["chunk_count"],
             "disclaimer": fallback_text,
+            "reading_id": reading_id,
+            "user_id": user["user_id"] if user else None,
         }
         yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
-
-        # 4. 保存历史
-        save_reading(
-            liupai=name, client_ip=client_ip, form_data=form_data,
-            response_text=state["full_text"], reasoning_text=state["reasoning_text"],
-            backend=backend_used, latency_sec=elapsed, chunk_count=state["chunk_count"],
-            status="ok" if state["full_text"] else "empty",
-        )
 
     return Response(
         stream_with_context(generate()),
@@ -597,30 +673,53 @@ def _process_stream_chunk(chunk, state):
 
 @app.route("/api/v2/history", methods=["GET"])
 def api_history():
-    """返回最近 N 条解读记录(默认 10,最多 100)。不需要登录,纯匿名浏览。
-    注意:这是 demo 阶段(所有人都能看到所有记录),上用户系统后改按 user_id 过滤。
+    """返回最近 N 条解读记录(默认 10,最多 100)。
+
+    v2.0 行为:
+      - 匿名用户 → 看所有公开解读(user_id IS NULL 或其它)
+      - 登录用户 → 只看自己(user_id = 自己)
+
+    后续可选:?scope=public 看所有公开、?scope=mine 看自己(默认)
     """
     limit = min(int(request.args.get("limit", 10)), 100)
     liupai_filter = request.args.get("liupai")
+    user = get_optional_user()
+    user_id = user["user_id"] if user else None
+    scope = request.args.get("scope", "mine" if user_id else "public")
+
     try:
         conn = get_db()
         try:
-            if liupai_filter:
-                rows = conn.execute(
-                    "SELECT id, liupai, question, backend, latency_sec, chunk_count, created_at "
-                    "FROM readings WHERE liupai = ? AND status = 'ok' "
-                    "ORDER BY id DESC LIMIT ?",
-                    (liupai_filter, limit),
-                ).fetchall()
+            # 决定 WHERE 子句
+            if user_id and scope == "mine":
+                # 登录用户:只看自己的(匿名解读不包含)
+                where = "WHERE user_id = ? AND status = 'ok'"
+                params = [user_id]
+            elif scope == "all":
+                # 看所有(管理员/调试用)
+                where = "WHERE status = 'ok'"
+                params = []
             else:
-                rows = conn.execute(
-                    "SELECT id, liupai, question, backend, latency_sec, chunk_count, created_at "
-                    "FROM readings WHERE status = 'ok' "
-                    "ORDER BY id DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
+                # 匿名 / scope=public:只看公开的(user_id IS NULL)
+                where = "WHERE user_id IS NULL AND status = 'ok'"
+                params = []
+
+            if liupai_filter:
+                where += " AND liupai = ?"
+                params.append(liupai_filter)
+
+            sql = (
+                "SELECT id, liupai, question, backend, latency_sec, chunk_count, "
+                "       created_at, user_id "
+                "FROM readings " + where + " ORDER BY id DESC LIMIT ?"
+            )
+            params.append(limit)
+            rows = conn.execute(sql, tuple(params)).fetchall()
+
             return jsonify({
                 "count": len(rows),
+                "scope": scope,
+                "user_id": user_id,
                 "items": [dict(r) for r in rows],
             })
         finally:
@@ -686,6 +785,24 @@ def api_stats():
         return jsonify({"error": "stats_query_failed", "detail": str(e)}), 500
 
 
+@app.route("/login")
+def login_page():
+    """v2.0 login page (auth_routes handles the API)."""
+    return render_template("login.html")
+
+
+@app.route("/register")
+def register_page():
+    """v2.0 register page (auth_routes handles the API)."""
+    return render_template("register.html")
+
+
+@app.route("/me")
+def me_page():
+    """v2.0 personal center (auth_routes + favorites_routes handle the API)."""
+    return render_template("me.html")
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
@@ -717,6 +834,21 @@ def api_version():
         "service": "taixuan-web",
         "build_time": "2026-07-13T11:45+08:00",
     })
+
+
+@app.route("/api/v2/analytics/dashboard", methods=["GET"])
+def api_analytics_dashboard():
+    """v1.3 lightweight analytics dashboard.
+    Returns PV/UV/funnel/event counts for last N days (default 7).
+    """
+    try:
+        days = int(request.args.get("days", 7))
+        days = max(1, min(days, 90))  # clamp [1, 90]
+        data = analytics.aggregate_dashboard(days)
+        return jsonify(data), 200
+    except Exception as e:
+        log.exception("analytics dashboard failed")
+        return jsonify({"error": "analytics_failed", "detail": str(e)}), 500
 
 
 # ============================================================
