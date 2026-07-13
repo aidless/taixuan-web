@@ -16,6 +16,7 @@ import time
 import re
 from functools import wraps
 from pathlib import Path
+from datetime import datetime, timedelta
 
 # ===== Config =====
 JWT_SECRET = os.environ.get("TAIXUAN_JWT_SECRET", "CHANGE-ME-IN-PROD-via-env")
@@ -84,6 +85,17 @@ def init_db(db_path: str = None) -> None:
             expires_at TIMESTAMP,
             is_active INTEGER DEFAULT 0
         );
+
+        CREATE TABLE IF NOT EXISTS password_resets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
     """)
     conn.commit()
 
@@ -300,13 +312,23 @@ def register_session(user_id: int, token: str) -> None:
 
 
 def is_token_revoked(token: str) -> bool:
-    """True if token was explicitly logged out (DELETE on logout)."""
+    """True if token is NOT in the active sessions table.
+
+    Sessions table is the whitelist: register_session inserts on login,
+    revoke_session deletes on logout or when password is reset (via
+    consume_reset_token). A token not present is considered revoked.
+    """
     conn = get_conn()
     try:
         row = conn.execute(
             "SELECT 1 FROM sessions WHERE token_hash = ?", (token_hash(token),)
         ).fetchone()
-        return False
+        # If row exists -> session is active -> NOT revoked
+        # If row does not exist -> session was deleted (logout or password reset) -> REVOKED
+        return row is None
+    except sqlite3.OperationalError:
+        # sessions table doesn't exist yet
+        return True
     finally:
         conn.close()
 
@@ -379,6 +401,119 @@ def remove_favorite(user_id: int, favorite_id: int) -> bool:
         )
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ===== Password reset (Phase 6) =====
+
+# Reset token TTL: 1 hour
+RESET_TOKEN_TTL_SEC = int(os.environ.get("TAIXUAN_RESET_TOKEN_TTL_SEC", "3600"))
+
+
+def request_password_reset(email: str) -> str:
+    """Generate a reset token for the given email.
+
+    Returns: token (32-byte URL-safe hex) on success, or None if user not found.
+    Caller should NOT distinguish between "user not found" and "success" to
+    prevent email enumeration (always respond 200 OK with generic message).
+
+    The token returned is the raw token to include in the reset URL.
+    Only the SHA256 hash is stored in the DB.
+    """
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT id FROM users WHERE email = ? AND is_active = 1",
+            (email,),
+        ).fetchone()
+        if not row:
+            return None
+
+        user_id = row["id"]
+        # 32 bytes hex = 64 chars, URL-safe
+        token = secrets.token_urlsafe(32)
+        token_h = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        expires_at = datetime.utcnow() + timedelta(seconds=RESET_TOKEN_TTL_SEC)
+
+        conn.execute(
+            "INSERT INTO password_resets (user_id, token_hash, expires_at) "
+            "VALUES (?, ?, ?)",
+            (user_id, token_h, expires_at.strftime("%Y-%m-%d %H:%M:%S")),
+        )
+        conn.commit()
+        return token
+    finally:
+        conn.close()
+
+
+def verify_reset_token(token: str) -> dict:
+    """Look up a reset token. Returns dict with user_id + email, or None.
+
+    Token must be valid (not expired, not used).
+    """
+    if not token:
+        return None
+    token_h = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at, u.email "
+            "FROM password_resets pr JOIN users u ON pr.user_id = u.id "
+            "WHERE pr.token_hash = ?",
+            (token_h,),
+        ).fetchone()
+        if not row:
+            return None
+        # Check used
+        if row["used_at"]:
+            return None
+        # Check expired
+        try:
+            expires = datetime.strptime(row["expires_at"][:19], "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            return None
+        if datetime.utcnow() > expires:
+            return None
+        return {"reset_id": row["id"], "user_id": row["user_id"], "email": row["email"]}
+    finally:
+        conn.close()
+
+
+def consume_reset_token(token: str, new_password: str) -> tuple:
+    """Consume a reset token and set new password. Returns (ok, msg).
+
+    Validates password complexity, marks token used, updates users.password_hash.
+    """
+    info = verify_reset_token(token)
+    if not info:
+        return False, "Invalid or expired reset token"
+
+    # Validate new password strength
+    ok, msg = validate_password(new_password)
+    if not ok:
+        return False, msg
+
+    # Mark token used + update password
+    token_h = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    new_hash = hash_password(new_password)
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+            (token_h,),
+        )
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (new_hash, info["user_id"]),
+        )
+        # Invalidate all existing sessions for this user (force re-login)
+        conn.execute(
+            "DELETE FROM sessions WHERE user_id = ?",
+            (info["user_id"],),
+        )
+        conn.commit()
+        return True, "Password reset successful"
     finally:
         conn.close()
 
