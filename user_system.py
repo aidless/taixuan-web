@@ -405,6 +405,121 @@ def remove_favorite(user_id: int, favorite_id: int) -> bool:
         conn.close()
 
 
+# ===== Subscriptions (Phase 7) =====
+
+# Plan catalog (test mode prices, real Stripe uses SK_TEST_* env vars)
+PLANS = {
+    "free": {"days": 0, "price_cents": 0, "label": "免费"},
+    "monthly": {"days": 30, "price_cents": 100, "label": "月度 ¥9.9"},
+    "yearly": {"days": 365, "price_cents": 1000, "label": "年度 ¥99"},
+}
+
+
+def get_subscription(user_id: int):
+    """Return current active subscription (or None if free/inactive).
+
+    Priority: newest active subscription.
+    """
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT id, user_id, plan, started_at, expires_at, is_active "
+            "FROM subscriptions WHERE user_id = ? AND is_active = 1 "
+            "ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def create_subscription(user_id: int, plan: str) -> tuple:
+    """Create a subscription for the user. Returns (ok, msg, sub_dict).
+
+    Validates plan, deactivates any current active sub, creates new one.
+    """
+    if plan not in PLANS:
+        return False, f"Unknown plan: {plan}. Valid: {list(PLANS.keys())}", None
+
+    plan_cfg = PLANS[plan]
+    if plan == "free":
+        # Deactivate any active sub (downgrade to free)
+        conn = get_conn()
+        try:
+            conn.execute(
+                "UPDATE subscriptions SET is_active = 0 WHERE user_id = ? AND is_active = 1",
+                (user_id,),
+            )
+            conn.commit()
+            return True, "Downgraded to free", {"plan": "free", "is_active": 0}
+        finally:
+            conn.close()
+
+    # paid plan
+    conn = get_conn()
+    try:
+        # Deactivate any current active sub
+        conn.execute(
+            "UPDATE subscriptions SET is_active = 0 WHERE user_id = ? AND is_active = 1",
+            (user_id,),
+        )
+        # Create new
+        started_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        expires_at = (datetime.utcnow() + timedelta(days=plan_cfg["days"])).strftime("%Y-%m-%d %H:%M:%S")
+        cur = conn.execute(
+            "INSERT INTO subscriptions (user_id, plan, started_at, expires_at, is_active) "
+            "VALUES (?, ?, ?, ?, 1)",
+            (user_id, plan, started_at, expires_at),
+        )
+        conn.commit()
+        return True, "Subscription created", {
+            "id": cur.lastrowid,
+            "user_id": user_id,
+            "plan": plan,
+            "started_at": started_at,
+            "expires_at": expires_at,
+            "is_active": 1,
+            "price_cents": plan_cfg["price_cents"],
+            "label": plan_cfg["label"],
+        }
+    finally:
+        conn.close()
+
+
+def cancel_subscription(user_id: int) -> tuple:
+    """Cancel current active subscription. Returns (ok, msg)."""
+    conn = get_conn()
+    try:
+        cur = conn.execute(
+            "UPDATE subscriptions SET is_active = 0 WHERE user_id = ? AND is_active = 1",
+            (user_id,),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return False, "No active subscription to cancel"
+        return True, "Subscription cancelled"
+    finally:
+        conn.close()
+
+
+def is_subscription_active(user_id: int) -> bool:
+    """True if user has any active paid subscription."""
+    sub = get_subscription(user_id)
+    if not sub or not sub["is_active"]:
+        return False
+    # Check expiration
+    if sub.get("expires_at"):
+        try:
+            expires = datetime.strptime(sub["expires_at"][:19], "%Y-%m-%d %H:%M:%S")
+            if datetime.utcnow() > expires:
+                return False
+        except (ValueError, TypeError):
+            pass
+    return sub.get("plan", "free") != "free"
+
+
 # ===== Password reset (Phase 6) =====
 
 # Reset token TTL: 1 hour
