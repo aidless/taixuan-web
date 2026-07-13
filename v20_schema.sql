@@ -51,3 +51,14 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 -- 5. ALTER readings (add user_id, NULL allowed for anonymous)
 ALTER TABLE readings ADD COLUMN user_id INTEGER;
 CREATE INDEX IF NOT EXISTS idx_readings_user ON readings(user_id);
+
+-- 6. login_attempts table (v2.0 Phase 5 brute-force protection)
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_ip TEXT NOT NULL,
+    email TEXT,
+    success INTEGER DEFAULT 0,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_time ON login_attempts(client_ip, attempted_at);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_email_time ON login_attempts(email, attempted_at);
