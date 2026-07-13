@@ -9,7 +9,7 @@ This lets reading/reading_stream endpoints work for both anonymous and logged-in
 import user_system
 
 
-def get_optional_user() -> dict | None:
+def get_optional_user():
     """Parse Authorization header (if any). Return user dict or None. Never 401."""
     from flask import request
     auth = request.headers.get("Authorization", "")
