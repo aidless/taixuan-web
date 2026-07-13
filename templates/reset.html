@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}重置密码 · 泰玄小站{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h1>重置密码</h1>
+    <p class="auth-subtitle">输入新密码。密码至少 8 位,需包含 3 种字符类(大小写字母/数字/特殊字符)。</p>
+
+    <form id="resetForm" class="auth-form">
+        <label>
+            <span>新密码</span>
+            <input type="password" name="new_password" required autocomplete="new-password" minlength="8" placeholder="至少 8 位,含数字+字母+其他字符">
+        </label>
+        <label>
+            <span>确认新密码</span>
+            <input type="password" name="confirm_password" required autocomplete="new-password" minlength="8" placeholder="再次输入">
+        </label>
+        <input type="hidden" name="token" id="resetToken" value="">
+        <button type="submit" class="btn-primary">重置密码</button>
+        <div id="resetError" class="auth-error" style="display:none"></div>
+        <div id="resetSuccess" class="auth-success" style="display:none"></div>
+    </form>
+
+    <p class="auth-switch">想起密码了?<a href="/login">返回登录</a></p>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script>
+// Read token from URL
+const params = new URLSearchParams(window.location.search);
+const token = params.get('token');
+if (!token) {
+    document.getElementById('resetError').textContent = '缺少重置 token。请通过邮件链接访问此页。';
+    document.getElementById('resetError').style.display = 'block';
+    document.getElementById('resetForm').style.display = 'none';
+} else {
+    document.getElementById('resetToken').value = token;
+}
+
+document.getElementById('resetForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const errBox = document.getElementById('resetError');
+    const okBox = document.getElementById('resetSuccess');
+    errBox.style.display = 'none';
+    okBox.style.display = 'none';
+
+    const pw = fd.get('new_password');
+    const pw2 = fd.get('confirm_password');
+    if (pw !== pw2) {
+        errBox.textContent = '两次输入的密码不一致';
+        errBox.style.display = 'block';
+        return;
+    }
+
+    const btn = e.target.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = '重置中...';
+
+    try {
+        const resp = await fetch('/api/v2/auth/reset', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                token: fd.get('token'),
+                new_password: pw,
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            errBox.textContent = data.error || '重置失败';
+            errBox.style.display = 'block';
+            return;
+        }
+        okBox.innerHTML = '密码重置成功!<br><a href="/login">立即登录</a>';
+        okBox.style.display = 'block';
+        e.target.style.display = 'none';
+    } catch (err) {
+        errBox.textContent = '网络错误: ' + err.message;
+        errBox.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '重置密码';
+    }
+});
+</script>
+{% endblock %}
