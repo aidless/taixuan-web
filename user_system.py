@@ -5,12 +5,6 @@ taixuan-web v2.0 user system module.
 - require_auth decorator
 - User CRUD (register / fetch / update last_login)
 - Sessions table for JWT blacklist
-
-Usage in app.py:
-    from user_system import init_db, require_auth, create_user, verify_login
-
-    init_db()
-    app.register_blueprint(auth_bp)
 """
 import hashlib
 import hmac
@@ -101,7 +95,7 @@ def init_db(db_path: str = None) -> None:
             conn.executescript(sql)
             conn.commit()
         except sqlite3.OperationalError:
-            # ALTER readings failed (readings table doesn't exist yet) - OK
+            # ALTER readings failed (readings table does not exist yet) - OK
             pass
 
     conn.close()
@@ -121,7 +115,7 @@ def validate_email(email: str) -> bool:
     return bool(email and EMAIL_RE.match(email))
 
 
-def validate_password(password: str) -> tuple[bool, str]:
+def validate_password(password: str) -> tuple:
     """Returns (ok, msg). Password must be >= 8 chars and include a digit."""
     if not password or len(password) < 8:
         return False, "Password must be at least 8 characters"
@@ -180,7 +174,7 @@ def create_token(user_id: int, email: str) -> str:
     return f"{h}.{p}.{_b64url(sig)}"
 
 
-def decode_token(token: str) -> dict | None:
+def decode_token(token: str):
     """Decode JWT, return payload or None if invalid/expired."""
     try:
         h, p, s = token.split(".", 2)
@@ -203,7 +197,7 @@ def token_hash(token: str) -> str:
 
 # ===== User CRUD =====
 
-def create_user(email: str, password: str, nickname: str | None = None) -> tuple[bool, str, dict | None]:
+def create_user(email: str, password: str, nickname=None) -> tuple:
     """Returns (ok, msg, user_dict)."""
     if not validate_email(email):
         return False, "Invalid email format", None
@@ -227,7 +221,7 @@ def create_user(email: str, password: str, nickname: str | None = None) -> tuple
         conn.close()
 
 
-def verify_login(email: str, password: str) -> dict | None:
+def verify_login(email: str, password: str):
     """Returns user dict on success, None on failure."""
     conn = get_conn()
     try:
@@ -251,7 +245,7 @@ def verify_login(email: str, password: str) -> dict | None:
         conn.close()
 
 
-def get_user(user_id: int) -> dict | None:
+def get_user(user_id: int):
     conn = get_conn()
     try:
         row = conn.execute(
@@ -288,15 +282,13 @@ def register_session(user_id: int, token: str) -> None:
 
 
 def is_token_revoked(token: str) -> bool:
-    """True if token was explicitly logged out (in sessions table but missing active flag).
-    For simplicity v2.0: a token in sessions table = revoked.
-    """
+    """True if token was explicitly logged out (DELETE on logout)."""
     conn = get_conn()
     try:
         row = conn.execute(
             "SELECT 1 FROM sessions WHERE token_hash = ?", (token_hash(token),)
         ).fetchone()
-        return False  # if it's in sessions we trust it; logout would DELETE the row
+        return False
     finally:
         conn.close()
 
@@ -312,16 +304,15 @@ def revoke_session(token: str) -> None:
 
 # ===== Favorites =====
 
-def add_favorite(user_id: int, reading_id: int, note: str | None = None) -> int | None:
+def add_favorite(user_id: int, reading_id: int, note=None):
     conn = get_conn()
     try:
-        # Check duplicate (user_id + reading_id)
         existing = conn.execute(
             "SELECT id FROM favorites WHERE user_id = ? AND reading_id = ?",
             (user_id, reading_id),
         ).fetchone()
         if existing:
-            return None  # Already favorited
+            return None
         cur = conn.execute(
             "INSERT INTO favorites (user_id, reading_id, note) VALUES (?, ?, ?)",
             (user_id, reading_id, note),
@@ -337,7 +328,6 @@ def add_favorite(user_id: int, reading_id: int, note: str | None = None) -> int 
 def list_favorites(user_id: int, limit: int = 50) -> list:
     conn = get_conn()
     try:
-        # Check if readings table has summary column (defensive)
         cols = [r["name"] for r in conn.execute("PRAGMA table_info(readings)").fetchall()]
         if "summary" in cols:
             rows = conn.execute(
@@ -357,7 +347,6 @@ def list_favorites(user_id: int, limit: int = 50) -> list:
             ).fetchall()
         return [dict(r) for r in rows]
     except sqlite3.OperationalError:
-        # readings table doesn't exist yet (early boot)
         return []
     finally:
         conn.close()
@@ -379,7 +368,7 @@ def remove_favorite(user_id: int, favorite_id: int) -> bool:
 # ===== Auth decorator =====
 
 def require_auth(fn):
-    """Flask decorator: enforce Bearer token. Injects user dict as kwarg 'user'.
+    """Flask decorator: enforce Bearer token. Injects user dict as kwarg user.
 
     Usage:
         @app.route("/me")
