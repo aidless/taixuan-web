@@ -789,6 +789,18 @@ def login_page():
     return render_template("login.html")
 
 
+@app.route("/forgot")
+def forgot_page():
+    """v2.0 forgot password page (Phase 6)."""
+    return render_template("forgot.html")
+
+
+@app.route("/reset")
+def reset_page():
+    """v2.0 reset password page (Phase 6). Reads ?token=... from query."""
+    return render_template("reset.html")
+
+
 @app.route("/register")
 def register_page():
     """v2.0 register page (auth_routes handles the API)."""
