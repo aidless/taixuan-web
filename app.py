@@ -36,9 +36,6 @@ from auth_routes import auth_bp  # noqa: E402
 from favorites_routes import favorites_bp  # noqa: E402
 from auth_helpers import get_optional_user  # noqa: E402
 
-# v1.3 lightweight analytics
-import analytics  # noqa: E402
-
 # ============================================================
 # 路径配置
 # ============================================================
