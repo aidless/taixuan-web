@@ -62,3 +62,15 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_time ON login_attempts(client_ip, attempted_at);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_email_time ON login_attempts(email, attempted_at);
+
+-- 7. password_resets table (v2.0 Phase 6 forgot/reset flow)
+CREATE TABLE IF NOT EXISTS password_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
