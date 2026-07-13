@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}登录 · 泰玄小站{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h1>登录</h1>
+    <p class="auth-subtitle">登录后可以保存解读历史、收藏喜欢的解读、添加私人笔记。</p>
+
+    <form id="loginForm" class="auth-form">
+        <label>
+            <span>邮箱</span>
+            <input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+        </label>
+        <label>
+            <span>密码</span>
+            <input type="password" name="password" required autocomplete="current-password" minlength="8" placeholder="至少 8 位,含数字">
+        </label>
+        <button type="submit" class="btn-primary">登录</button>
+        <div id="loginError" class="auth-error" style="display:none"></div>
+    </form>
+
+    <p class="auth-switch">还没账号?<a href="/register">立即注册</a></p>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const btn = e.target.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = '登录中...';
+    const errBox = document.getElementById('loginError');
+    errBox.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/v2/auth/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                email: fd.get('email'),
+                password: fd.get('password'),
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            errBox.textContent = data.error || '登录失败';
+            errBox.style.display = 'block';
+            return;
+        }
+        // Save token and redirect to home
+        TaixuanAuth.setToken(data.access_token, data.user_id, data.nickname);
+        window.location.href = '/me';
+    } catch (err) {
+        errBox.textContent = '网络错误: ' + err.message;
+        errBox.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '登录';
+    }
+});
+</script>
+{% endblock %}

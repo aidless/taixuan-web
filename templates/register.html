@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}注册 · 泰玄小站{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h1>注册</h1>
+    <p class="auth-subtitle">免费,只邮箱 + 密码,不验证手机、不发广告邮件。</p>
+
+    <form id="registerForm" class="auth-form">
+        <label>
+            <span>邮箱</span>
+            <input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+        </label>
+        <label>
+            <span>昵称(可选)</span>
+            <input type="text" name="nickname" maxlength="32" placeholder="留空默认用邮箱前缀">
+        </label>
+        <label>
+            <span>密码</span>
+            <input type="password" name="password" required autocomplete="new-password" minlength="8" placeholder="至少 8 位,含数字">
+        </label>
+        <button type="submit" class="btn-primary">注册</button>
+        <div id="registerError" class="auth-error" style="display:none"></div>
+    </form>
+
+    <p class="auth-switch">已经有账号?<a href="/login">立即登录</a></p>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script>
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const btn = e.target.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = '注册中...';
+    const errBox = document.getElementById('registerError');
+    errBox.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/v2/auth/register', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                email: fd.get('email'),
+                nickname: fd.get('nickname'),
+                password: fd.get('password'),
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            errBox.textContent = data.error || '注册失败';
+            errBox.style.display = 'block';
+            return;
+        }
+        TaixuanAuth.setToken(data.access_token, data.user_id, data.nickname);
+        window.location.href = '/me';
+    } catch (err) {
+        errBox.textContent = '网络错误: ' + err.message;
+        errBox.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '注册';
+    }
+});
+</script>
+{% endblock %}
