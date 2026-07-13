@@ -27,19 +27,6 @@ def add_favorite(user):
     fav_id = user_system.add_favorite(user["user_id"], reading_id, note)
     if fav_id is None:
         return jsonify({"error": "reading not found or already favorited"}), 400
-
-    # v1.3 analytics
-    try:
-        import analytics
-        analytics.track_event(
-            name="favorite",
-            user_id=user["user_id"],
-            liupai=None,
-            payload={"reading_id": reading_id, "favorite_id": fav_id},
-        )
-    except Exception:
-        pass
-
     return jsonify({"favorite_id": fav_id}), 200
 
 
@@ -54,7 +41,7 @@ def list_favorites(user):
         limit = int(request.args.get("limit", 50))
     except ValueError:
         limit = 50
-    limit = max(1, min(limit, 200))  # clamp to [1, 200]
+    limit = max(1, min(limit, 200))
 
     items = user_system.list_favorites(user["user_id"], limit)
     return jsonify({"count": len(items), "items": items}), 200
