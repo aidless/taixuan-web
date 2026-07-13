@@ -701,9 +701,21 @@ def healthz():
     return jsonify({
         "status": "ok",
         "service": "taixuan-web",
-        "version": "1.0.0",
+        "version": "1.2.0",
         "primary_backend": "deepseek-v3",
         "fallback_backend": "ollama-qwen3-4b",
+        "build_time": "2026-07-13T11:45+08:00",
+        "git_commit": "c376ac3",
+    })
+
+
+@app.route("/api/v2/version")
+def api_version():
+    """轻量版版本信息(给 ECS 健康检查脚本的扩展用,不影响 healthz 兼容性)"""
+    return jsonify({
+        "version": "1.2.0",
+        "service": "taixuan-web",
+        "build_time": "2026-07-13T11:45+08:00",
     })
 
 
