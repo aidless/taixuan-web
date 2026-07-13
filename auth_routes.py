@@ -1,6 +1,8 @@
 """
 taixuan-web v2.0 authentication routes (Flask Blueprint).
 Mount: app.register_blueprint(auth_bp, url_prefix="/api/v2/auth")
+
+Phase 5: brute-force protection via IP-based login lockout.
 """
 from flask import Blueprint, request, jsonify
 
@@ -13,7 +15,7 @@ auth_bp = Blueprint("auth", __name__)
 def register():
     """POST /api/v2/auth/register
     Body: {"email": str, "password": str, "nickname": str?}
-    Resp: 200 {user_id, access_token, expires_at}
+    Resp: 200 {user_id, access_token, expires_in}
           400 {error: msg}
     """
     data = request.get_json(silent=True) or {}
@@ -43,14 +45,26 @@ def login():
     Body: {"email": str, "password": str}
     Resp: 200 {user_id, access_token, expires_in}
           401 {error: "invalid credentials"}
+          429 {error: "Too many failed login attempts..."} (Phase 5)
     """
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
+    client_ip = user_system.get_client_ip()
+
+    # Phase 5: lockout check BEFORE password verification
+    locked, lock_msg = user_system.check_login_lockout(client_ip)
+    if locked:
+        return jsonify({"error": lock_msg, "retry_after_sec": user_system.LOCKOUT_WINDOW_SEC}), 429
 
     user = user_system.verify_login(email, password)
     if not user:
+        user_system.record_login_attempt(client_ip, email, success=False)
         return jsonify({"error": "invalid credentials"}), 401
+
+    # Success: clear failed attempts, record success
+    user_system.clear_login_attempts(client_ip)
+    user_system.record_login_attempt(client_ip, email, success=True)
 
     token = user_system.create_token(user["user_id"], user["email"])
     user_system.register_session(user["user_id"], token)
