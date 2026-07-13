@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}忘记密码 · 泰玄小站{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h1>忘记密码</h1>
+    <p class="auth-subtitle">输入注册邮箱,我们会发送重置链接(1 小时内有效)。</p>
+
+    <form id="forgotForm" class="auth-form">
+        <label>
+            <span>邮箱</span>
+            <input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+        </label>
+        <button type="submit" class="btn-primary">发送重置链接</button>
+        <div id="forgotError" class="auth-error" style="display:none"></div>
+        <div id="forgotSuccess" class="auth-success" style="display:none"></div>
+    </form>
+
+    <p class="auth-switch">想起来了?<a href="/login">返回登录</a></p>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script>
+document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const btn = e.target.querySelector('button');
+    const errBox = document.getElementById('forgotError');
+    const okBox = document.getElementById('forgotSuccess');
+    errBox.style.display = 'none';
+    okBox.style.display = 'none';
+
+    btn.disabled = true;
+    btn.textContent = '发送中...';
+
+    try {
+        const resp = await fetch('/api/v2/auth/forgot', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ email: fd.get('email') }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            errBox.textContent = data.error || '发送失败';
+            errBox.style.display = 'block';
+            return;
+        }
+        // Dev mode: API returns reset_url directly (for testing)
+        if (data.reset_url) {
+            okBox.innerHTML = '重置链接已生成(开发模式直接显示):<br><a href="' + data.reset_url + '">' + data.reset_url + '</a><br><small>链接 ' + data.expires_in_sec + ' 秒内有效</small>';
+        } else {
+            okBox.textContent = '如果该邮箱已注册,重置链接已发送。请检查邮箱。';
+        }
+        okBox.style.display = 'block';
+    } catch (err) {
+        errBox.textContent = '网络错误: ' + err.message;
+        errBox.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '发送重置链接';
+    }
+});
+</script>
+{% endblock %}
