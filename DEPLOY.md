@@ -20,6 +20,7 @@ pip install --quiet flask gunicorn requests pyyaml
 # 代码放 /var/www/taixuan/ 下,git clone 或者 scp 都行
 
 export OPENAI_API_KEY="sk-你的key"
+export TAIXUAN_JWT_SECRET="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"  # 生产必须设置,否则登录令牌用不安全默认值
 export OPENAI_API_BASE="https://api.deepseek.com/v1"
 export DEEPSEEK_MODEL="deepseek-v4-flash"
 
@@ -112,6 +113,7 @@ cat >> ~/.bashrc <<'EOF'
 
 # DeepSeek API
 export OPENAI_API_KEY="sk-你的key"
+export TAIXUAN_JWT_SECRET="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"  # 生产必须设置,否则登录令牌用不安全默认值
 export OPENAI_API_BASE="https://api.deepseek.com/v1"
 export DEEPSEEK_MODEL="deepseek-v4-flash"
 EOF
