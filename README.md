@@ -1,5 +1,7 @@
 # 泰玄小站 · Taixuan Web
 
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > Flask + DeepSeek 写的传统文化解读网站。八派合参(八字、紫微、奇门、六爻、梅花、塔罗、西方占星、吠陀占星),LLM 实时生成解读。
 
 **在线地址**:http://116.62.69.83
