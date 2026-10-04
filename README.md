@@ -8,6 +8,19 @@
 
 **声明**:本项目仅供文化参考与娱乐,不构成任何专业建议(医疗、法律、财务、心理咨询等)。
 
+## 当前状态（v2.0 · 2026-10 更新）
+
+代码已超出本 README 的 v1.0 设计文档口径，以下功能**已上线**：
+
+- 用户系统：邮箱注册 + JWT 登录 + 密码重置（`user_system.py` / `auth_routes.py`）
+- 解读收藏：favorites 表 + 收藏路由（`favorites_routes.py`）
+- 订阅：monthly / yearly / free 三档（`subscriptions_routes.py`）
+- 支付对接：支付宝 + Stripe，mock / 真实双模式（`alipay_mock.py` / `stripe_mock.py`）
+- 访问统计：自研埋点 + 漏斗看板（`analytics.py`）
+- 版本接口：`/api/v2/version`
+
+下方主体保留 v1.0 设计文档原貌，未逐节改写。
+
 ---
 
 ## 目录
@@ -582,19 +595,19 @@ Flask App (Django-equivalent)
 
 - [ ] 域名绑定 + SSL 证书(certbot)
 - [ ] supervisor 守护(Workbench 关了也能跑)
-- [ ] 访问统计(umami 或 Plausible,自托管)
+- [x] 访问统计(自研 analytics.py:log_visit/track_event/漏斗看板,已上线)
 - [ ] 流式输出(SSE,降低 perceived latency)
 
-### v2.0(中期)
+### v2.0(部分完成,代码已上线——详见顶部状态块)
 
 - [ ] 专业排盘库接入(`lunardate` / `swisseph`)
-- [ ] 用户系统(邮箱注册)
+- [x] 用户系统(邮箱注册+JWT 登录+密码重置,user_system.py)
 - [ ] 历史记录(SQLite 后端)
-- [ ] 解读收藏、分享
+- [x] 解读收藏(favorites 表;分享未做)
 
 ### v3.0(远期)
 
-- [ ] 支付(单次解读付费 / 包月)
+- [x] 支付(月/年/免费订阅 subscriptions_routes.py + 支付宝/Stripe mock 真实双模式;单次付费未做)
 - [ ] 移动端 PWA(离线访问)
 - [ ] 英文版(i18n)
 - [ ] 多 LLM 后端对比测试(A/B test)
