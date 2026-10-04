@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.0.0  2026-10-03（补记——功能此前已上线但未记档）
+
+新增:
+- 用户系统:注册/登录/密码重置(JWT,`user_system.py`、`auth_routes.py`)
+- 解读收藏(`favorites_routes.py`)
+- 订阅三档:monthly/yearly/free(`subscriptions_routes.py`)
+- 支付宝/Stripe 支付对接,mock+真实双模式(`alipay_mock.py`/`stripe_mock.py`)
+- 自研访问统计:埋点+漏斗看板(`analytics.py`)
+- `/api/v2/version` 版本接口
+
+部署:
+- 新增环境变量 `TAIXUAN_JWT_SECRET`(不设则用户令牌签名用不安全默认值,生产必须设置)
+
 ## v1.0.0  2026-07-12
 
 第一个开源版本。从微信小程序改成独立网站。
