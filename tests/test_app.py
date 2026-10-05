@@ -4,8 +4,10 @@ import sys
 import unittest
 from unittest.mock import patch, MagicMock
 
-# 把项目根加到 path
-sys.path.insert(0, r'C:\Users\Administrator\cow\fortune-web-v2')
+# Put the repository root on the path. This used to be a literal
+# r'C:\Users\Administrator\cow\fortune-web-v2' - the author's copy of
+# this directory - so the import failed on every machine but that one.
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent))
 
 
 class TestValidation(unittest.TestCase):
