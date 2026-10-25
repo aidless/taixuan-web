@@ -200,26 +200,26 @@ $ECS = "116.62.69.83"
 
 # 图标(2-3 个)
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null `
-  'C:\Users\Administrator\cow\fortune-web-v2\static\icons\icon-192.png' `
+  'static/icons/icon-192.png' `
   "root@${ECS}:/var/www/taixuan/static/icons/"
 
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null `
-  'C:\Users\Administrator\cow\fortune-web-v2\static\icons\icon-512.png' `
+  'static/icons/icon-512.png' `
   "root@${ECS}:/var/www/taixuan/static/icons/"
 
 # manifest
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null `
-  'C:\Users\Administrator\cow\fortune-web-v2\static\manifest.json' `
+  'static/manifest.json' `
   "root@${ECS}:/var/www/taixuan/static/manifest.json"
 
 # sw.js
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null `
-  'C:\Users\Administrator\cow\fortune-web-v2\static\sw.js' `
+  'static/sw.js' `
   "root@${ECS}:/var/www/taixuan/static/sw.js"
 
 # base.html
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null `
-  'C:\Users\Administrator\cow\fortune-web-v2\templates\base.html' `
+  'templates/base.html' `
   "root@${ECS}:/var/www/taixuan/templates/base.html"
 ```
 

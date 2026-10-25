@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 # Put the repository root on the path. This used to be a literal
-# r'C:\Users\Administrator\cow\fortune-web-v2' - the author's copy of
+# the author's local working copy of
 # this directory - so the import failed on every machine but that one.
 sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent))
 

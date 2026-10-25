@@ -289,7 +289,7 @@ curl -X POST https://api.deepseek.com/v1/chat/completions \
 本地:
 
 ```powershell
-cd C:\Users\Administrator\cow\fortune-web-v2
+cd fortune-web-v2   # 仓库根
 git pull
 git add .
 git commit -m "..."

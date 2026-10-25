@@ -42,12 +42,9 @@ import analytics  # noqa: E402  # v1.3 lightweight analytics
 # 路径配置
 # ============================================================
 BASE_DIR = Path(__file__).parent.resolve()
-PROMPTS_DIR = Path(r"F:\test\2026-06-27-14-59-27\wx-miniprogram\specs\prompts")
-# Linux 上 prompts 目录(部署到 ECS 时):/var/www/taixuan/specs/prompts
-if not PROMPTS_DIR.exists():
-    alt = BASE_DIR / "specs" / "prompts"
-    if alt.exists():
-        PROMPTS_DIR = alt
+# 默认用仓库内 specs/prompts；部署到 ECS 等外部目录时用环境变量覆盖，
+# 如 PROMPTS_DIR=/var/www/taixuan/specs/prompts
+PROMPTS_DIR = Path(os.environ.get("PROMPTS_DIR", BASE_DIR / "specs" / "prompts"))
 
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
