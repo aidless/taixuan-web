@@ -2,9 +2,11 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+> **Legacy / 已下线（2026-10-26）**：这个 Flask 原型已从公网下线，旧站数据库已离线备份，未迁移到新站。现行产品是 https://wanxiangapp.xyz 。本仓库保留用于代码与历史参考；下文出现的 `116.62.69.83` 均为已下线的旧站地址。
+
 > Flask + DeepSeek 写的传统文化解读网站。八派合参(八字、紫微、奇门、六爻、梅花、塔罗、西方占星、吠陀占星),LLM 实时生成解读。
 
-**在线地址**:http://116.62.69.83
+**在线地址**：旧站已下线；现行产品：https://wanxiangapp.xyz
 
 **源码**:https://github.com/aidless/taixuan-web
 
@@ -12,7 +14,7 @@
 
 ## 当前状态（v2.0 · 2026-10 更新）
 
-代码已超出本 README 的 v1.0 设计文档口径，以下功能**已上线**：
+代码已超出本 README 的 v1.0 设计文档口径。以下功能为 v2.0 代码能力（旧站曾上线，已于 2026-10-26 下线）：
 
 - 用户系统：邮箱注册 + JWT 登录 + 密码重置（`user_system.py` / `auth_routes.py`）
 - 解读收藏：favorites 表 + 收藏路由（`favorites_routes.py`）
@@ -597,10 +599,10 @@ Flask App (Django-equivalent)
 
 - [ ] 域名绑定 + SSL 证书(certbot)
 - [ ] supervisor 守护(Workbench 关了也能跑)
-- [x] 访问统计(自研 analytics.py:log_visit/track_event/漏斗看板,已上线)
+- [x] 访问统计(自研 analytics.py:log_visit/track_event/漏斗看板,已实现)
 - [ ] 流式输出(SSE,降低 perceived latency)
 
-### v2.0(部分完成,代码已上线——详见顶部状态块)
+### v2.0(代码完成；旧站已于 2026-10-26 下线——详见顶部状态块)
 
 - [ ] 专业排盘库接入(`lunardate` / `swisseph`)
 - [x] 用户系统(邮箱注册+JWT 登录+密码重置,user_system.py)
