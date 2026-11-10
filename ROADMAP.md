@@ -218,7 +218,7 @@ volumes:
 **前端嵌入**(base.html footer 段加):
 
 ```html
-<script async defer data-website-id="<your-umami-id>" src="https://116.62.69.83/umami/script.js"></script>
+<script async defer data-website-id="<your-umami-id>" src="https://LEGACY_ECS_IP/umami/script.js"></script>
 ```
 
 **用户价值**:你能看到真实的流量数据,而不是猜"今天有没有人来"。

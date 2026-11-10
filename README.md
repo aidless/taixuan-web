@@ -1,8 +1,22 @@
+> **⚠️ ARCHIVED（已归档，2026-10-26 下线）** · 本仓库为只读历史存档，接受 issue/PR 的维护已停止。
+
 # 泰玄小站 · Taixuan Web
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **Legacy / 已下线（2026-10-26）**：这个 Flask 原型已从公网下线，旧站数据库已离线备份，未迁移到新站。现行产品是 https://wanxiangapp.xyz 。本仓库保留用于代码与历史参考；下文出现的 `116.62.69.83` 均为已下线的旧站地址。
+> **Legacy / 已下线（2026-10-26）**：这个 Flask 原型已从公网下线，旧站数据库已离线备份，未迁移到新站。现行产品是 https://wanxiangapp.xyz 。本仓库保留用于代码与历史参考；旧站 ECS 的公网 IP 已随下线一并撤除，历史文档中以 `LEGACY_ECS_IP` 占位。
+
+## 归档说明（这个仓曾承载什么、为什么归档、successor）
+
+- **曾承载什么**：taixuan-web 是 2026 年上线的传统文化解读网站原型 —— Flask + DeepSeek，八派合参（八字、紫微、奇门、六爻、梅花、塔罗、西方占星、吠陀占星），LLM 实时生成解读；后续叠加了邮箱注册 + JWT 登录、收藏、订阅（月付/年付）、支付宝/Stripe 双模式支付与自研埋点看板，部署在单台阿里云 ECS（Ubuntu 22.04 / 2C2G，`DEPLOY.md` 保留完整部署过程）。本 README 主体即其 v1.0 设计文档 + v2.0 能力补充，代码、部署脚本与 RFC 提案（`docs/PROPOSAL-RFC-00*`）全部保留，可整体复用于重新部署。
+- **为什么归档**：产品方向在 2026-10-26 调整，旧站从公网下线、数据库离线备份；这个原型不再迭代，仓库转为只读存档，防止死链与过时部署口径误导后来者。
+- **Successor**：现行产品是线上站点 **https://wanxiangapp.xyz**（2026-11-10 实测 HTTP 200，nginx）。GitHub 上没有与之对应的公开 successor 代码仓（`aidless` 名下检索 `wanxiang` 为 0 结果）；如需继续开发，以本仓的历史文档 + 新仓为准，本仓不再接收功能改动。
+
+**Quickstart（仅限本地/重新部署场景）**：完整部署过程见 [DEPLOY.md](DEPLOY.md)（Docker 路线见 `docker-compose.yml` + `Dockerfile`）；重新部署前先读上方「安全注意」，尤其必须换掉曾出现在旧站环境里的明文模型 API key。
+
+**CI badge**：[![CI](https://github.com/aidless/taixuan-web/actions/workflows/ci.yml/badge.svg)](https://github.com/aidless/taixuan-web/actions/workflows/ci.yml) —— 该 badge 长期为红，属如实状态：`.github/workflows/ci.yml` 顶部注记记录了原因（`benchmark_llm.py` / `tests/test_llm_backends.py` 引用 `OllamaQwen3Backend`，而 `llm_backends.py:188` 实际定义名是 `OllamaQwenBackend`，测试收集即失败）。归档仓不再修。
+
+**Limits（本仓不做什么）**：只读历史存档；不接受功能改动；`mock` 支付仅限开发模式；旧站性能数字（如「总耗时 5-15 秒」）是下线前的历史实测，对新站不构成任何承诺。
 
 > Flask + DeepSeek 写的传统文化解读网站。八派合参(八字、紫微、奇门、六爻、梅花、塔罗、西方占星、吠陀占星),LLM 实时生成解读。
 
@@ -114,7 +128,7 @@ Flask 单进程,2C2G ECS(2 核 2GB)就能跑。无数据库、无 Redis、无外
                      │ HTTPS / HTTP
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                阿里云 ECS (116.62.69.83)                     │
+│                阿里云 ECS (LEGACY_ECS_IP，已下线)                     │
 │                  Ubuntu 22.04 / 2C2G                          │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
@@ -315,7 +329,7 @@ taixuan-web/
 └────────────────────────────┴─────────────────────────────────┘
 ```
 
-**关键路径耗时**(实测 116.62.69.83):
+**关键路径耗时**(实测旧站 ECS，IP 已随下线撤除):
 - 网络往返:< 100ms(国内到 DeepSeek)
 - DeepSeek 推理:2-5 秒(reasoning 模型 + 中文生成)
 - 后处理:< 50ms
@@ -497,7 +511,7 @@ v1.0 阶段排盘算法做最简版(主要靠 LLM 自身的命理知识),v2.0 �
    │
    │  HTTP (80 端口)
    ▼
-阿里云 ECS (116.62.69.83)
+阿里云 ECS (LEGACY_ECS_IP，已下线)
    Ubuntu 22.04 / 2C2G
    ├─ 2GB swap(必需,防 OOM)
    │

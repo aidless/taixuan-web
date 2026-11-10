@@ -196,7 +196,7 @@ curl http://127.0.0.1:80/static/manifest.json | python -m json.tool | head -10
 **步骤 5.1 · Windows PowerShell 分批 scp**:
 ```powershell
 $env:PATH = "$env:PATH;C:\Windows\System32\OpenSSH"
-$ECS = "116.62.69.83"
+$ECS = "<LEGACY_ECS_IP>"
 
 # 图标(2-3 个)
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null `
@@ -236,7 +236,7 @@ echo ""
 ## 步骤 6 · 浏览器实测
 
 **步骤 6.1 · Chrome DevTools 检查 PWA**:
-1. 打开 http://116.62.69.83
+1. 打开 http://LEGACY_ECS_IP
 2. F12 → Application 标签
 3. Manifest:看到 name/icons/theme_color
 4. Service Workers:看到 sw.js activated
